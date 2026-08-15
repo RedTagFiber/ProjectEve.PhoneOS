@@ -1,0 +1,164 @@
+PHASE 16 USAGE EXAMPLES
+
+All examples use GAME TIME.
+
+------------------------------------------------------------
+1) FOLLOW-UP
+------------------------------------------------------------
+
+await initiated.ScheduleAsync(new NpcInitiatedContactRequest
+{
+    PlayerId = playerId,
+    PlayerName = playerName,
+    NpcId = 1,
+    NpcNameHint = "Eve Sinclair",
+
+    Kind = "follow_up",
+    Motive = "follow_up",
+
+    DueGameTime = clock.Now.AddHours(2),
+
+    Urgency = 30,
+    Commitment = 75,
+
+    ContextText =
+        "Eve decided earlier that she wanted to check back with Ryan later today.",
+
+    SourceKey = "example:eve-followup-1"
+});
+
+------------------------------------------------------------
+2) PROMISE / REMINDER FROM A REAL ConversationPlan
+------------------------------------------------------------
+
+await initiated.ScheduleAsync(new NpcInitiatedContactRequest
+{
+    PlayerId = playerId,
+    PlayerName = playerName,
+    NpcId = 1,
+
+    Kind = "promise",
+    Motive = "keep_promise",
+
+    DueGameTime = exactResolvedGameTime,
+
+    ConversationPlanId = planId,
+
+    Commitment = 95,
+    Urgency = 55,
+
+    ForceCommit = true,
+
+    SourceKey = $"plan-followup:{planId}"
+});
+
+IMPORTANT:
+ConversationPlan currently stores TimeText, not a guaranteed parsed timestamp.
+Resolve the actual game time in the schedule/calendar system FIRST.
+Phase 16 will NOT turn vague "later" or "tomorrow" wording into a made-up time.
+
+------------------------------------------------------------
+3) GOSSIP / WARNING USING ONLY KNOWLEDGE THE NPC OWNS
+------------------------------------------------------------
+
+await initiated.ScheduleAsync(new NpcInitiatedContactRequest
+{
+    PlayerId = playerId,
+    PlayerName = playerName,
+    NpcId = 3,
+
+    Kind = "gossip",
+    Motive = "warn",
+
+    DueGameTime = clock.Now.AddMinutes(20),
+
+    ClaimId = lisaClaimId,
+
+    Urgency = 65,
+    Commitment = 80,
+
+    SourceKey = $"lisa-warning-claim:{lisaClaimId}"
+});
+
+Phase 16 verifies that NpcId 3 ACTUALLY owns lisaClaimId.
+It does not pull the original hidden wording from another NPC.
+
+------------------------------------------------------------
+4) APOLOGY
+------------------------------------------------------------
+
+await initiated.ScheduleAsync(new NpcInitiatedContactRequest
+{
+    PlayerId = playerId,
+    PlayerName = playerName,
+    NpcId = 2,
+    NpcNameHint = "Adam Sinclair",
+
+    Kind = "apology",
+    Motive = "repair_relationship",
+
+    DueGameTime = clock.Now.AddMinutes(45),
+
+    ContextText =
+        "Adam has decided he wants to apologize for how he spoke during the argument.",
+
+    Urgency = 35,
+    Commitment = 72,
+
+    SourceKey = "adam-apology-after-argument-42"
+});
+
+The wording generator may make Adam awkward, blunt, warm, short, etc.
+It may NOT invent a new argument detail that is absent from current memory/context.
+
+------------------------------------------------------------
+5) FIRST MESSAGE / UNKNOWN NUMBER
+------------------------------------------------------------
+
+await initiated.ScheduleAsync(new NpcInitiatedContactRequest
+{
+    PlayerId = playerId,
+    PlayerName = playerName,
+    NpcId = 57,
+    NpcNameHint = "Megan Carter",
+
+    Kind = "work",
+    Motive = "contact",
+
+    DueGameTime = clock.Now.AddMinutes(10),
+
+    ContextText =
+        "Megan was given the player's phone number by the simulation-owned work contact chain.",
+
+    AllowUnknownNumber = true,
+    ForceCommit = true,
+
+    SourceKey = "megan-first-work-text"
+});
+
+On delivery:
+PlayerPhoneContact source = received_text
+
+------------------------------------------------------------
+6) SPONTANEOUS CHECK-INS
+------------------------------------------------------------
+
+No manual call is normally needed.
+
+NpcInitiatedContactHostedService checks the player's existing phone contacts
+once per GAME DAY.
+
+It may schedule up to 2 conservative spontaneous check-ins.
+
+Spontaneous generation is explicitly told:
+
+    NO external event is asserted.
+
+So it can naturally send:
+    "hey, how's your day going?"
+or
+    "you surviving today? lol"
+
+but it cannot invent:
+    "I heard Adam got arrested"
+unless there is a real validated claim/trigger.

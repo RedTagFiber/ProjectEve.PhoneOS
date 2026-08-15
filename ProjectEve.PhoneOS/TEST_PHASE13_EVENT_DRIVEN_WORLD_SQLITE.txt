@@ -1,0 +1,58 @@
+PHASE 13 MANUAL TEST
+(File is .txt intentionally — not SQL Server.)
+
+BUILD
+1. Clean
+2. Build Core
+3. Build ProjectEve
+4. Build PhoneOS
+5. Rebuild
+
+TEST A — MUNDANE BOUNDARIES DO NOT STOP NEXT EVENT
+1. Have NPCs scheduled at locations away from the player.
+2. Press Next Event.
+3. The game clock may process their schedule boundaries internally.
+4. It should NOT stop merely because those NPCs started/ended work.
+
+TEST B — VISIBLE ARRIVAL STOPS FAST-FORWARD
+1. Player is physically in location A.
+2. NPC is scheduled to arrive at location A in 30 game minutes.
+3. Press +1 hour.
+4. Clock should stop at the NPC arrival, not consume the full hour.
+5. Result/status should say "<NPC> arrives."
+6. PRESENT should show that NPC if Phase 6 perception says the player sees them.
+
+TEST C — VISIBLE DEPARTURE
+1. Player + NPC are in same scene and the NPC is visible.
+2. Advance across NPC departure.
+3. Clock stops at departure.
+4. NPC disappears from PRESENT.
+
+TEST D — HIDDEN NPC
+1. Arrange an NPC in the same physical location but hidden from the player.
+2. Advance across that NPC's departure/arrival.
+3. It must NOT stop Next Event merely because the hidden NPC moved.
+4. Shared scene narration must not reveal the NPC.
+
+TEST E — PHONE VS WORLD EVENT
+1. Queue an NPC phone reply/check at 7:20 game time.
+2. Schedule a visible NPC arrival at 7:12.
+3. Press Next Event.
+4. It should stop at 7:12.
+5. Press Next Event again; the phone pipeline can continue toward 7:20.
+
+OPTIONAL SQLITE INSPECTION
+
+SELECT NpcId,NpcName,Status,CurrentLocationId,
+       OriginLocationId,DestinationLocationId,UpdatedGameTime
+FROM NpcWorldLocationState
+ORDER BY NpcId;
+
+SELECT Id,NpcId,NpcName,FromStatus,ToStatus,
+       FromLocationId,ToLocationId,GameTime,Source
+FROM NpcWorldMovementEvent
+ORDER BY Id DESC;
+
+SELECT Id,PlayerId,EventType,Title,GameTime,Status
+FROM GameEvent
+ORDER BY GameTime,Id;

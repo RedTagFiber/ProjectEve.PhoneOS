@@ -1,0 +1,58 @@
+PHASE 8 SQLITE DIAGNOSTICS
+Paste these into your SQLite tool. This is intentionally a .txt file so
+Visual Studio does not run the SQL Server parser on SQLite syntax.
+
+-- Recent Phase 8 decisions
+SELECT
+    Id,
+    SourceNpcId,
+    ClaimId,
+    TargetNpcId,
+    Action,
+    ShareScore,
+    PrivacyScore,
+    DistortionScore,
+    ConfrontScore,
+    AudienceCount,
+    Motive,
+    Channel,
+    DecisionGameTime,
+    ExecutionStatus
+FROM NpcSocialDecision
+ORDER BY Id DESC
+LIMIT 100;
+
+-- Decisions Eve made
+SELECT
+    Id,
+    ClaimId,
+    TargetNpcId,
+    Action,
+    ShareScore,
+    PrivacyScore,
+    ReasonCodes,
+    ExecutionStatus,
+    ActualText
+FROM NpcSocialDecision
+WHERE SourceNpcId = 1
+ORDER BY Id DESC
+LIMIT 100;
+
+-- Show executed disclosures next to Phase 7 transmissions
+SELECT
+    d.Id AS DecisionId,
+    d.SourceNpcId,
+    d.TargetNpcId,
+    d.Action,
+    d.ActualText,
+    d.ExecutedGameTime,
+    t.Id AS TransmissionId,
+    t.ReportedText
+FROM NpcSocialDecision d
+LEFT JOIN KnowledgeTransmission t
+    ON t.FromNpcId = d.SourceNpcId
+   AND t.ToNpcId = d.TargetNpcId
+   AND t.SourceClaimId = d.ClaimId
+WHERE d.ExecutionStatus = 'executed'
+ORDER BY d.Id DESC
+LIMIT 100;

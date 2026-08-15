@@ -1,0 +1,35 @@
+-- Project Eve Phase 3 diagnostic queries
+
+-- Open/closed sections for each player.
+SELECT Id,PlayerId,NpcId,NpcName,PlayerName,Channel,Location,Status,
+       StartedGameTime,EndedGameTime
+FROM ConversationSession
+ORDER BY Id DESC;
+
+-- Exact transcript, newest sessions first.
+SELECT s.Id AS SessionId,
+       s.PlayerId,
+       s.Channel,
+       s.Location,
+       m.Sequence,
+       m.Role,
+       m.Speaker,
+       m.MessageText
+FROM ConversationSession s
+JOIN ConversationMessage m ON m.SessionId=s.Id
+ORDER BY s.Id DESC,m.Sequence;
+
+-- Finished summaries.
+SELECT Id,SessionId,PlayerId,NpcId,Channel,Location,Summary,EndReason
+FROM ConversationEvent
+ORDER BY Id DESC;
+
+-- Learned facts.
+SELECT Id,EventId,PlayerId,NpcId,Subject,FactKey,FactValue,Confidence,SourceType
+FROM ConversationFact
+ORDER BY Id DESC;
+
+-- Open/planned meetups and promises.
+SELECT Id,EventId,PlayerId,NpcId,Description,TimeText,Location,Status
+FROM ConversationPlan
+ORDER BY Id DESC;

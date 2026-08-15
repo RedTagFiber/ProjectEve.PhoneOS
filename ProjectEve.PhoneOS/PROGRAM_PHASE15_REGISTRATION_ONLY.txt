@@ -1,0 +1,21 @@
+PHASE 15 REGISTRATION ONLY
+ProjectEve.PhoneOS/Program.cs
+
+Keep all Phase 6-14 registrations.
+
+ADD:
+
+builder.Services.AddSingleton<ProjectEve.Core.World.IPlayerTravelService,
+    ProjectEve.World.PlayerTravelService>();
+
+builder.Services.AddHostedService<ProjectEve.PhoneOS.Services.PlayerTravelHostedService>();
+
+Recommended order:
+- IGameTimeService
+- IWorldAdvanceCoordinator
+- IKnownLocationService
+- IPlayerWorldPresenceService
+- IPlayerTravelService
+- hosted services
+
+Do not replace the entire Program.cs.

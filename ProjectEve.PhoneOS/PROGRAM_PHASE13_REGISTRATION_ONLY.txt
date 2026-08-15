@@ -1,0 +1,17 @@
+PHASE 13 REGISTRATION ONLY
+ProjectEve.PhoneOS/Program.cs
+
+Keep Phase 12:
+builder.Services.AddSingleton<ProjectEve.Core.World.IWorldOccupancyService,
+    ProjectEve.World.WorldOccupancyService>();
+
+builder.Services.AddHostedService<ProjectEve.PhoneOS.Services.WorldOccupancyHostedService>();
+
+ADD Phase 13:
+builder.Services.AddSingleton<ProjectEve.Core.Time.IWorldAdvanceCoordinator,
+    ProjectEve.Time.WorldAdvanceCoordinator>();
+
+Make sure GameplayTimeControllerService and GameTimeTextCommandParser remain
+registered exactly once as they already were.
+
+DO NOT replace your entire Program.cs.

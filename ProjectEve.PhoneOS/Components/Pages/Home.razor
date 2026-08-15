@@ -1,0 +1,449 @@
+﻿@page "/"
+@using ProjectEve.PhoneOS.Services
+@inject PlayerProfileService Players
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>Eve Phone</PageTitle>
+
+<div class="phone-stage">
+    <div class="phone-bezel">
+        <div class="phone-notch"></div>
+        <div class="phone-screen home-screen">
+            <div class="home-bg"></div>
+            <div class="home-bg-glow"></div>
+
+            <div class="status-bar">
+                <span>@DateTime.Now.ToString("h:mm")</span>
+                <span class="status-pills">
+                    <span class="pill">5G</span>
+                    <span class="pill battery">84%</span>
+                </span>
+            </div>
+
+            <div class="home-body">
+                <div class="lock-card">
+                    <div class="lock-date">@DateTime.Now.ToString("dddd").ToUpper()</div>
+                    <div class="lock-day">@DateTime.Now.ToString("MMM d")</div>
+                    <div class="lock-title">@_title</div>
+                    <div class="lock-sub">@_subtitle</div>
+                </div>
+
+                <div class="widget-row">
+                    <a class="widget glass" href="/messages">
+                        <div class="widget-label">Messages</div>
+                        <div class="widget-main">Eve</div>
+                        <div class="widget-preview">@_msgPreview</div>
+                        <div class="widget-time">now</div>
+                    </a>
+                    <a class="widget glass weather" href="/calendar">
+                        <div class="widget-label">Today</div>
+                        <div class="widget-main">@_temp</div>
+                        <div class="widget-preview">@_weatherLine</div>
+                    </a>
+                </div>
+
+                <div class="app-grid">
+                    <a class="app-icon" href="/messages">
+                        <div class="app-bubble app-msg"><span>💬</span></div>
+                        <span>Messages</span>
+                    </a>
+                    <a class="app-icon" href="/photos">
+                        <div class="app-bubble app-photo"><span>🖼️</span></div>
+                        <span>Photos</span>
+                    </a>
+                    <a class="app-icon" href="/gram">
+                        <div class="app-bubble app-gram"><span>📸</span></div>
+                        <span>Gram</span>
+                    </a>
+                    <a class="app-icon" href="/book">
+                        <div class="app-bubble app-book"><span>📘</span></div>
+                        <span>Book</span>
+                    </a>
+                    <a class="app-icon" href="/music">
+                        <div class="app-bubble app-music"><span>🎵</span></div>
+                        <span>Music</span>
+                    </a>
+                    <a class="app-icon" href="/calendar">
+                        <div class="app-bubble app-cal"><span>📅</span></div>
+                        <span>Calendar</span>
+                    </a>
+                    <a class="app-icon" href="/group">
+                        <div class="app-bubble app-group"><span>👥</span></div>
+                        <span>Groups</span>
+                    </a>
+                    <a class="app-icon" href="/in-person">
+                        <div class="app-bubble app-person"><span>📍</span></div>
+                        <span>In Person</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="phone-dock glass-dock">
+                <a class="app-icon" href="/messages"><div class="app-bubble app-msg"><span>💬</span></div></a>
+                <a class="app-icon" href="/in-person"><div class="app-bubble app-person"><span>📍</span></div></a>
+                <a class="app-icon" href="/gram"><div class="app-bubble app-gram"><span>📸</span></div></a>
+                <a class="app-icon" href="/music"><div class="app-bubble app-music"><span>🎵</span></div></a>
+            </div>
+
+            <div class="home-indicator"></div>
+        </div>
+    </div>
+</div>
+
+@code {
+    string _title = "Eve";
+    string _subtitle = "Small town · live session";
+    string _temp = "68°";
+    string _weatherLine = "Clear · Bellefontaine";
+    string _msgPreview = "You made it.";
+
+    protected override void OnInitialized()
+    {
+        if (!Players.HasPlayer)
+        {
+            Nav.NavigateTo("/setup");
+            return;
+        }
+
+        var p = Players.Current!;
+        _title = p.DisplayName;
+        _subtitle = $"{p.HomeType} · {p.EveRelationship}";
+        _weatherLine = $"Clear · {p.HomeTown}";
+        _msgPreview = p.EveRelationship switch
+        {
+            "Dating" => "Thinking about you.",
+            "Friends" => "You free later?",
+            "Complicated" => "We should talk.",
+            _ => "Hey. You made it."
+        };
+    }
+}
+
+<style>
+    .phone-stage {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 1.25rem;
+        background: radial-gradient(ellipse at 50% -10%, #2a2040 0%, transparent 45%), radial-gradient(ellipse at 50% 0%, #1a1a28 0%, #07070a 60%);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    }
+
+    .phone-bezel {
+        width: min(390px, 100%);
+        border-radius: 44px;
+        padding: 11px;
+        background: linear-gradient(155deg, #4a4a52 0%, #222226 35%, #0c0c0e 100%);
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.1), 0 30px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.15);
+        position: relative;
+    }
+
+    .phone-notch {
+        position: absolute;
+        top: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 118px;
+        height: 30px;
+        background: #000;
+        border-radius: 20px;
+        z-index: 6;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+    }
+
+    .home-screen {
+        position: relative;
+        border-radius: 36px;
+        overflow: hidden;
+        min-height: 740px;
+        height: min(800px, 92vh);
+        color: #f5f5f7;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .home-bg {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(165deg, #1b1530 0%, #0d1020 40%, #08080c 100%);
+    }
+
+    .home-bg-glow {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at 20% 15%, rgba(120, 90, 255, 0.35), transparent 42%), radial-gradient(circle at 85% 25%, rgba(255, 70, 140, 0.22), transparent 40%), radial-gradient(circle at 50% 80%, rgba(40, 120, 255, 0.12), transparent 45%);
+        pointer-events: none;
+        animation: glowShift 12s ease-in-out infinite alternate;
+    }
+
+    @@keyframes glowShift {
+        from {
+            opacity: 0.85;
+            filter: hue-rotate(0deg);
+        }
+
+        to {
+            opacity: 1;
+            filter: hue-rotate(18deg);
+        }
+    }
+
+    .status-bar {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.9rem 1.4rem 0.25rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+
+    .status-pills {
+        display: flex;
+        gap: 0.35rem;
+    }
+
+    .pill {
+        font-size: 0.65rem;
+        padding: 0.12rem 0.4rem;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.1);
+        border: 1px solid rgba(255,255,255,0.08);
+    }
+
+        .pill.battery {
+            background: rgba(52, 199, 89, 0.2);
+            border-color: rgba(52, 199, 89, 0.35);
+            color: #b8f5c8;
+        }
+
+    .home-body {
+        position: relative;
+        z-index: 2;
+        flex: 1;
+        padding: 0.6rem 1.1rem 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .lock-card {
+        padding: 0.35rem 0.25rem 0.5rem;
+    }
+
+    .lock-date {
+        font-size: 0.72rem;
+        letter-spacing: 0.14em;
+        opacity: 0.55;
+        font-weight: 600;
+    }
+
+    .lock-day {
+        font-size: 1.05rem;
+        opacity: 0.85;
+        margin-top: 0.1rem;
+    }
+
+    .lock-title {
+        font-size: 2.35rem;
+        font-weight: 750;
+        letter-spacing: -0.03em;
+        margin-top: 0.15rem;
+        background: linear-gradient(120deg, #fff 20%, #c9b6ff 55%, #ff9ec8 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+
+    .lock-sub {
+        font-size: 0.78rem;
+        opacity: 0.55;
+        margin-top: 0.15rem;
+    }
+
+    .widget-row {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 0.55rem;
+    }
+
+    .widget {
+        text-decoration: none;
+        color: #f5f5f7;
+        border-radius: 20px;
+        padding: 0.75rem 0.85rem;
+        min-height: 88px;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+        .widget:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(0,0,0,0.35);
+        }
+
+    .glass {
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.12);
+        backdrop-filter: blur(18px) saturate(1.3);
+        -webkit-backdrop-filter: blur(18px) saturate(1.3);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    }
+
+    .widget.weather {
+        background: linear-gradient(160deg, rgba(70,120,255,0.35), rgba(30,40,80,0.45));
+    }
+
+    .widget-label {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        opacity: 0.6;
+    }
+
+    .widget-main {
+        font-size: 1.15rem;
+        font-weight: 700;
+        margin-top: 0.25rem;
+    }
+
+    .widget-preview {
+        font-size: 0.78rem;
+        opacity: 0.7;
+        margin-top: 0.2rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .widget-time {
+        position: absolute;
+        top: 0.7rem;
+        right: 0.85rem;
+        font-size: 0.65rem;
+        opacity: 0.5;
+    }
+
+    .app-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem 0.4rem;
+        margin-top: 0.25rem;
+    }
+
+    .app-icon {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.35rem;
+        text-decoration: none;
+        color: #f5f5f7;
+        font-size: 0.68rem;
+        font-weight: 500;
+    }
+
+    .app-bubble {
+        width: 58px;
+        height: 58px;
+        border-radius: 16px;
+        display: grid;
+        place-items: center;
+        font-size: 1.5rem;
+        box-shadow: 0 10px 22px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.25);
+        position: relative;
+        transition: transform 0.12s ease;
+    }
+
+    .app-icon:hover .app-bubble {
+        transform: scale(1.06);
+    }
+
+    .app-bubble span {
+        filter: drop-shadow(0 1px 1px rgba(0,0,0,0.25));
+    }
+
+    .app-msg {
+        background: linear-gradient(145deg, #5ef07a, #1f9b45);
+    }
+
+    .app-photo {
+        background: linear-gradient(145deg, #ffb340, #ff453a);
+    }
+
+    .app-gram {
+        background: linear-gradient(145deg, #ff3b6b, #c44bff 50%, #5e5ce6);
+    }
+
+    .app-book {
+        background: linear-gradient(145deg, #3b9bff, #64d2ff);
+    }
+
+    .app-music {
+        background: linear-gradient(145deg, #ff4d78, #ff9f0a);
+    }
+
+    .app-cal {
+        background: linear-gradient(145deg, #ff5a52, #ff8a80);
+    }
+
+    .app-group {
+        background: linear-gradient(145deg, #64d2ff, #0a84ff);
+    }
+
+    .app-person {
+        background: linear-gradient(145deg, #34e0a0, #30b0ff);
+    }
+
+    .phone-dock {
+        position: relative;
+        z-index: 2;
+        margin: 0.35rem 0.9rem 0;
+        padding: 0.7rem 0.85rem;
+        border-radius: 24px;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+    }
+
+    .glass-dock {
+        background: rgba(30, 30, 36, 0.55);
+        border: 1px solid rgba(255,255,255,0.12);
+        backdrop-filter: blur(20px) saturate(1.4);
+        -webkit-backdrop-filter: blur(20px) saturate(1.4);
+        box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+    }
+
+    .phone-dock .app-bubble {
+        width: 52px;
+        height: 52px;
+        font-size: 1.35rem;
+        border-radius: 15px;
+    }
+
+    .phone-dock .app-icon span:not(:first-child) {
+        display: none;
+    }
+
+    .phone-dock .app-icon {
+        font-size: 0;
+    }
+
+    .phone-dock .app-bubble span {
+        font-size: 1.35rem;
+    }
+
+    .home-indicator {
+        position: relative;
+        z-index: 2;
+        width: 122px;
+        height: 4px;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.35);
+        margin: 0.7rem auto 0.55rem;
+    }
+</style>

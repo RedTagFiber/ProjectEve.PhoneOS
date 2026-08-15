@@ -1,0 +1,321 @@
+@page "/messages"
+@using ProjectEve.PhoneOS.Services
+@implements IAsyncDisposable
+@inject PhoneMessagingService Messaging
+@inject PhoneThreadPresenceService ThreadPresence
+@inject PlayerProfileService Players
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>Messages</PageTitle>
+
+<div class="messages-v3">
+    <section class="messages-list @(_selected is not null ? "mobile-hidden" : "")">
+        <header class="messages-list-head">
+            <div>
+                <div class="messages-kicker">PHONE</div>
+                <h1>Messages</h1>
+            </div>
+            <a class="messages-home-link" href="/">Home</a>
+        </header>
+
+        <div class="messages-search-wrap">
+            <input class="messages-search"
+                   value="@_contactFilter"
+                   @oninput="FilterContacts"
+                   placeholder="Search conversations" />
+        </div>
+
+        <div class="messages-contact-list">
+            @if (!FilteredContacts.Any())
+            {
+                <div class="messages-empty-list">No phone contacts yet.</div>
+            }
+
+            @foreach (var c in FilteredContacts)
+            {
+                var preview = PreviewFor(c);
+                <button type="button"
+                        class="messages-contact-row @(_selected?.NpcId == c.NpcId ? "active" : "")"
+                        @onclick="() => OpenContact(c)">
+                    <div class="messages-contact-avatar">@Initials(c.DisplayName)</div>
+                    <div class="messages-contact-copy">
+                        <div class="messages-contact-topline">
+                            <strong>@c.DisplayName</strong>
+                            <span>@preview.TimeLabel</span>
+                        </div>
+                        <div class="messages-preview">@preview.Text</div>
+                    </div>
+                </button>
+            }
+        </div>
+    </section>
+
+    <section class="messages-thread @(_selected is null ? "mobile-hidden" : "")">
+        @if (_selected is null)
+        {
+            <div class="messages-thread-empty">
+                <div>Select a person to open the conversation.</div>
+            </div>
+        }
+        else
+        {
+            <header class="messages-thread-head">
+                <button class="messages-mobile-back" type="button" @onclick="BackToList">‹</button>
+                <div class="messages-thread-avatar">@Initials(_selected.DisplayName)</div>
+                <div class="messages-thread-title">
+                    <strong>@_selected.DisplayName</strong>
+                    <span>Text conversation</span>
+                </div>
+                <a class="messages-inperson-link" href="/in-person">In Person</a>
+            </header>
+
+            <div class="messages-log">
+                @if (_lines.Count == 0)
+                {
+                    <div class="messages-log-empty">No messages yet.</div>
+                }
+
+                @foreach (var m in _lines)
+                {
+                    <div class="message-line @(m.IsMine ? "mine" : "theirs")">
+                        <div class="message-bubble">
+                            <div>@m.MessageText</div>
+                            <time>@MessageTime(m)</time>
+                        </div>
+                        @if (m.IsMine)
+                        {
+                            <div class="message-delivery">@DeliveryLabel(m)</div>
+                        }
+                    </div>
+                }
+
+                @if (_pendingReplies > 0)
+                {
+                    <div class="message-pending">Delivered</div>
+                }
+            </div>
+
+            <footer class="messages-composer">
+                <input value="@_draft"
+                       @oninput="e => _draft = e.Value?.ToString() ?? string.Empty"
+                       @onkeydown="OnKey"
+                       placeholder="Message @_selected.DisplayName"
+                       spellcheck="true"
+                       autocomplete="on" />
+                <button type="button" @onclick="Send" disabled="@_saving">Send</button>
+            </footer>
+        }
+    </section>
+</div>
+
+@code {
+    const int EveNpcId = 1;
+    string _playerId = "";
+    string _playerName = "Player";
+    string _draft = "";
+    string _contactFilter = "";
+    bool _saving;
+    int _pendingReplies;
+    List<PhoneContactRow> _contacts = new();
+    List<PhoneMessageRow> _lines = new();
+    PhoneContactRow? _selected;
+
+    CancellationTokenSource? _pollCts;
+    Task? _pollTask;
+
+    IEnumerable<PhoneContactRow> FilteredContacts
+        => string.IsNullOrWhiteSpace(_contactFilter)
+            ? _contacts
+            : _contacts.Where(c => c.DisplayName.Contains(_contactFilter, StringComparison.OrdinalIgnoreCase));
+
+    protected override Task OnInitializedAsync()
+    {
+        if (!Players.HasPlayer)
+        {
+            Nav.NavigateTo("/setup");
+            return Task.CompletedTask;
+        }
+
+        var player = Players.Current!;
+        _playerId = player.Id;
+        _playerName = !string.IsNullOrWhiteSpace(player.FullName)
+            ? player.FullName
+            : player.DisplayName;
+
+        // Current prototype already has an established Eve thread.
+        Messaging.EnsureKnownContact(
+            _playerId,
+            EveNpcId,
+            "Eve Sinclair",
+            source: "existing_eve_thread",
+            contactTier: 1);
+
+        ReloadContacts();
+
+        _pollCts = new CancellationTokenSource();
+        _pollTask = PollAsync(_pollCts.Token);
+        return Task.CompletedTask;
+    }
+
+    void ReloadContacts()
+        => _contacts = Messaging.GetContacts(_playerId).ToList();
+
+    void FilterContacts(ChangeEventArgs e)
+        => _contactFilter = e.Value?.ToString() ?? "";
+
+    void OpenContact(PhoneContactRow contact)
+    {
+        if (_selected is not null)
+            ThreadPresence.Clear(_playerId, _selected.NpcId);
+
+        _selected = contact;
+        _draft = "";
+        ThreadPresence.Touch(_playerId, contact.NpcId);
+        ReloadThread();
+    }
+
+    void BackToList()
+    {
+        if (_selected is not null)
+            ThreadPresence.Clear(_playerId, _selected.NpcId);
+
+        _selected = null;
+        _lines.Clear();
+        _pendingReplies = 0;
+    }
+
+    async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Send();
+    }
+
+    async Task Send()
+    {
+        if (_selected is null || _saving)
+            return;
+
+        var text = _draft.Trim();
+        if (text.Length == 0)
+            return;
+
+        _saving = true;
+        _draft = "";
+        ThreadPresence.Touch(_playerId, _selected.NpcId);
+
+        try
+        {
+            await Messaging.SendPlayerMessageAsync(
+                _playerId,
+                _playerName,
+                _selected.NpcId,
+                _selected.DisplayName,
+                text);
+
+            ReloadThread();
+            ReloadContacts();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    void ReloadThread()
+    {
+        if (_selected is null)
+            return;
+
+        ThreadPresence.Touch(_playerId, _selected.NpcId);
+        _lines = Messaging.GetMessages(
+            _playerId,
+            _selected.NpcId,
+            _selected.DisplayName,
+            1000).ToList();
+        _pendingReplies = Messaging.GetPendingReplyCount(_playerId, _selected.NpcId);
+    }
+
+    MessagePreview PreviewFor(PhoneContactRow c)
+    {
+        try
+        {
+            var rows = Messaging.GetMessages(_playerId, c.NpcId, c.DisplayName, 1);
+            var last = rows.LastOrDefault();
+            if (last is null)
+                return new MessagePreview("No messages yet", "");
+
+            return new MessagePreview(
+                last.MessageText,
+                MessageTime(last));
+        }
+        catch
+        {
+            return new MessagePreview("", "");
+        }
+    }
+
+    async Task PollAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await InvokeAsync(() =>
+                {
+                    if (_selected is not null)
+                        ReloadThread();
+                    ReloadContacts();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+    }
+
+    static string Initials(string name)
+    {
+        var parts = (name ?? "")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0) return "?";
+        if (parts.Length == 1) return parts[0][..1].ToUpperInvariant();
+        return (parts[0][..1] + parts[^1][..1]).ToUpperInvariant();
+    }
+
+    static string MessageTime(PhoneMessageRow message)
+        => message.SentGameTime.HasValue
+            ? message.SentGameTime.Value.ToString("h:mm tt")
+            : message.SentUtc.ToLocalTime().ToString("h:mm tt");
+
+    static string DeliveryLabel(PhoneMessageRow message)
+        => message.DeliveryState switch
+        {
+            "queued" => "Sending…",
+            "sent" => "Sent",
+            "delivered" => "Delivered",
+            "seen" => "Read",
+            _ => "Sent"
+        };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_selected is not null)
+            ThreadPresence.Clear(_playerId, _selected.NpcId);
+
+        if (_pollCts is not null)
+        {
+            _pollCts.Cancel();
+            _pollCts.Dispose();
+        }
+
+        if (_pollTask is not null)
+        {
+            try { await _pollTask; } catch { }
+        }
+    }
+
+    sealed record MessagePreview(string Text, string TimeLabel);
+}

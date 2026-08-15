@@ -1,0 +1,13 @@
+Phase 10 registration additions for ProjectEve.PhoneOS/Program.cs
+
+Add this AFTER IScenePerceptionService registration:
+
+builder.Services.AddSingleton<ProjectEve.Core.Scene.ISharedScenePresenceCoordinator,
+    ProjectEve.Scene.SharedScenePresenceCoordinator>();
+
+Make sure the Phase 9 group orchestrator registration is also present:
+
+builder.Services.AddSingleton<ProjectEve.Core.Scene.IGroupSceneConversationOrchestrator,
+    ProjectEve.Scene.GroupSceneConversationOrchestrator>();
+
+Do not replace your whole Program.cs if it already has newer local changes.

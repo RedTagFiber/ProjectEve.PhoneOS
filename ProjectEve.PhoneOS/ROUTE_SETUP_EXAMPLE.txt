@@ -1,0 +1,45 @@
+PHASE 15 ROUTE SETUP
+
+Project Eve deliberately does NOT ship made-up travel times.
+
+Before a player can travel between locations, the world author/server must
+register route durations.
+
+C# EXAMPLE
+
+await travel.RegisterRouteAsync(new WorldTravelRouteRegistration
+{
+    FromLocationId = "ryans-house",
+    ToLocationId = "coffee-shop",
+    Method = "car",
+
+    // PUT YOUR AUTHORED / MEASURED GAME-WORLD TIME HERE.
+    Minutes = YOUR_MINUTES,
+
+    Bidirectional = true,
+    Source = "authored_world"
+});
+
+You may register multiple methods for the same endpoints:
+
+car
+truck
+bike
+walk
+bus
+
+ROUTE GRAPH
+
+Routes are links, not necessarily one route for every location pair.
+
+Example:
+
+Ryan House -> Main Street
+Main Street -> Sinclair Coffee
+
+The planner can use both links and calculate the total.
+
+No route graph path for the chosen method:
+    travel is unavailable
+
+That is intentional. The engine must not invent a duration.

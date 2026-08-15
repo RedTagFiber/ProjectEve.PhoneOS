@@ -1,0 +1,47 @@
+PHASE 10 MANUAL TEST — SQLITE / UI
+(File is .txt on purpose so Visual Studio does not run SQL Server IntelliSense.)
+
+UI TEST A — ONE PLAYER
+1. Open /in-person.
+2. Confirm left PRESENT shows:
+   - local player
+   - Eve Sinclair (if she is not currently held in another active scene)
+   - real distance values
+3. Type ACTION and SAY.
+4. Confirm your action/speech appears quickly while Thinking is still visible.
+5. Confirm Eve's BODY/ACTION/SPEECH are separate colored plain-text entries.
+
+UI TEST B — TWO PLAYERS
+1. Open Player 1 at Sinclair Coffee.
+2. Open a second browser/profile with a different PlayerId.
+3. Put Player 2 at Sinclair Coffee.
+4. Both left panels should show the other player when visible.
+5. Player 1 says something.
+6. Player 2 should see it from the shared scene stream.
+7. Close Player 1.
+8. Player 2 and Eve must remain in the scene.
+
+UI TEST C — KNOWLEDGE BOUNDARY
+1. Put both players + Eve in the shared scene.
+2. Move/add an NPC farther away with the Phase 6/10 server service.
+3. Use quiet/normal speech through the orchestrator test harness.
+4. Verify observer views differ when Phase 6 returns fragment/partial/none.
+
+OPTIONAL SQLITE INSPECTION (run with a SQLite tool, not SQL Server):
+
+SELECT SceneId, PlayerId, PlayerName, SlotIndex, LastHeartbeatRealUtc
+FROM SharedScenePlayerMembership
+ORDER BY SceneId, SlotIndex;
+
+SELECT SceneId, CharacterKey, NpcId, PlayerId, DisplayName,
+       XFeet, YFeet, IsActive
+FROM ScenePresence
+ORDER BY SceneId, CharacterKey;
+
+SELECT Id, SceneId, Status, StartedGameTime, LastGameTime, EndedGameTime
+FROM GroupSceneSession
+ORDER BY Id DESC;
+
+SELECT SessionId, Sequence, ActorName, EntryType, ExactText, GameTime
+FROM GroupSceneEntry
+ORDER BY SessionId DESC, Sequence;

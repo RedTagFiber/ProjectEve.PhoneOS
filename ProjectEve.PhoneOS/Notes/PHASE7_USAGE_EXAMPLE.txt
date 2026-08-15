@@ -1,0 +1,30 @@
+FUTURE GROUP / SOCIAL ORCHESTRATOR CALL
+=======================================
+
+When Eve actually chooses to tell a known claim aloud, the group/social layer
+should call INpcKnowledgeCommunicationService instead of directly copying facts:
+
+var result = await knowledgeCommunication.SpeakKnownClaimAsync(
+    new NpcKnowledgeSpeechRequest
+    {
+        FromNpcId = 1,                // Eve
+        SourceClaimId = eveClaimId,   // claim Eve actually owns
+        SceneId = currentSceneId,
+        SpokenText = "Ryan told me Adam took money from work.",
+        VoiceLevel = "quiet",
+        IntendedNpcIds = new[] { 2 }, // Adam intended; anyone else may overhear
+        PlayerId = playerId,
+        Channel = "in_person"
+    },
+    cancellationToken);
+
+The service then:
+  1. asks Phase 6 who physically heard it,
+  2. uses each observer's PerceivedText,
+  3. creates a separate generation+1 claim for each NPC who heard,
+  4. creates no knowledge for anyone who heard nothing.
+
+If Lisa only heard:
+    "Ryan ... Adam ... money ... work"
+
+then Lisa's knowledge claim contains ONLY that fragment.

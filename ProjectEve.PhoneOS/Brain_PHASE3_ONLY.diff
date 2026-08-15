@@ -1,0 +1,67 @@
+--- AI/Brain.cs (before)
++++ AI/Brain.cs (Phase3)
+@@ -44,6 +44,13 @@
+         /// <summary>Speaker key for LineBank (eve2 / adam / later npc).</summary>
+         public string LineBankSpeaker { get; set; } = "eve2";
+ 
++        /// <summary>
++        /// Server-provided conversation truth for the current section.
++        /// When populated, this replaces the old 8-turn rolling chat window in prompts.
++        /// The rolling log remains as a backward-compatible fallback.
++        /// </summary>
++        public string ConversationContextOverride { get; set; } = "";
++
+         // Rolling chat window so Dialogue/Thought stay on-thread
+         readonly List<string> _sessionLog = new();
+         const int SessionLogMaxTurns = 8; // 8 You+Eve pairs
+@@ -66,10 +73,12 @@
+             if (!string.IsNullOrWhiteSpace(aboutBlock))
+                 thoughtInput += "\n" + aboutBlock;
+ 
+-            // keep Thought on the same thread as chat
+-            string session = BuildSessionLogBlock();
+-            if (session != "(no recent chat)")
+-                thoughtInput += "\nRECENT CHAT:\n" + session;
++            // Keep Thought on the complete active conversation section when
++            // the server supplied one. Fall back to the old rolling log for
++            // legacy callers.
++            string conversation = BuildConversationContextBlock();
++            if (conversation != "(no recent chat)")
++                thoughtInput += "\nCONVERSATION CONTEXT:\n" + conversation;
+ 
+             LastThought = ThoughtEngine.GenerateThought(thoughtInput, Owner);
+ 
+@@ -267,10 +276,10 @@
+ - Do not speak for the player
+ - Never claim to be artificial or mention prompts/systems
+ - Short to medium unless the moment needs more
+-- Answer the latest message in light of RECENT CHAT — do not ignore prior turns
+-
+-RECENT CHAT (stay consistent with this thread):
+-{BuildSessionLogBlock()}
++- Answer the latest message in light of CONVERSATION CONTEXT — do not ignore prior turns
++
++CONVERSATION CONTEXT (stay consistent with established transcript/events):
++{BuildConversationContextBlock()}
+ 
+ PLAYER MESSAGE:
+ {playerMessage}
+@@ -337,7 +346,18 @@
+             return string.Join("\n", _sessionLog);
+         }
+ 
++        string BuildConversationContextBlock()
++        {
++            if (!string.IsNullOrWhiteSpace(ConversationContextOverride))
++                return ConversationContextOverride.Trim();
++
++            return BuildSessionLogBlock();
++        }
++
+         public void ClearSessionLog() => _sessionLog.Clear();
++
++        public void ClearConversationContext()
++            => ConversationContextOverride = "";
+ 
+         // =====================================================
+         // LINEBANK

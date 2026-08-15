@@ -1,0 +1,377 @@
+@using ProjectEve.Core.Time
+@using Microsoft.AspNetCore.Components.Web
+@using ProjectEve.Core.World
+@using ProjectEve.PhoneOS.Services
+@inject IGameTimeService Clock
+@inject IWorldAdvanceCoordinator WorldTime
+@inject IKnownLocationService Locations
+@inject IPlayerTravelService Travel
+@inject PlayerProfileService Players
+@inject GameTimeTextCommandParser TimeCommands
+@inject GameplayTimeControllerService GameplayTime
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="eve-panel eve-right-panel">
+    <section class="eve-panel-section eve-time-block">
+        <div class="eve-panel-kicker">GAME TIME</div>
+        <div class="eve-game-date">@Clock.Now.ToString("dddd, MMM d")</div>
+        <div class="eve-game-clock">@Clock.Now.ToString("h:mm tt")</div>
+        <div class="eve-panel-muted">Real now: @DateTime.Now.ToString("h:mm tt")</div>
+    </section>
+
+    <section class="eve-panel-section">
+        <button class="eve-primary-action" type="button" @onclick="NextEvent" disabled="@_busy">Next Event</button>
+        <div class="eve-time-grid">
+            <button type="button" @onclick="() => AdvanceMinutes(15)" disabled="@_busy">+15 min</button>
+            <button type="button" @onclick="() => AdvanceMinutes(60)" disabled="@_busy">+1 hour</button>
+            <button type="button" @onclick="() => AdvanceMinutes(120)" disabled="@_busy">+2 hours</button>
+            <button type="button" @onclick="() => AdvanceMinutes(1440)" disabled="@_busy">Next day</button>
+            <button type="button" @onclick="SleepToMorning" disabled="@_busy">Sleep → 7 AM</button>
+        </div>
+
+        <label class="eve-field-label" for="time-command">Time command</label>
+        <div class="eve-inline-field">
+            <input id="time-command"
+                   value="@_timeCommand"
+                   @oninput="e => _timeCommand = e.Value?.ToString() ?? string.Empty"
+                   @onkeydown="OnTimeCommandKey"
+                   placeholder="next event / wait 2 hours" />
+            <button type="button" @onclick="RunTimeCommand" disabled="@_busy">Go</button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_status))
+        {
+            <div class="eve-tool-status">@_status</div>
+        }
+    </section>
+
+    <section class="eve-panel-section">
+        <div class="eve-panel-kicker">TRAVEL</div>
+
+        @if (_activeTravel is not null)
+        {
+            <div class="eve-panel-primary">
+                Traveling to @_activeTravel.DestinationDisplayName
+            </div>
+            <div class="eve-panel-muted">
+                @_activeTravel.Method · arrival @_activeTravel.ExpectedArrivalGameTime.ToString("h:mm tt")
+            </div>
+            <button class="eve-primary-action"
+                    type="button"
+                    @onclick="ContinueTravel"
+                    disabled="@_busy">
+                Continue Travel
+            </button>
+        }
+        else
+        {
+            <label class="eve-field-label" for="travel-method">Method</label>
+            <select id="travel-method"
+                    class="eve-search-input"
+                    @bind="_travelMethod">
+                <option value="car">Car</option>
+                <option value="truck">Truck</option>
+                <option value="bike">Bike</option>
+                <option value="walk">Walk</option>
+                <option value="bus">Bus</option>
+            </select>
+        }
+
+        <label class="eve-field-label" for="travel-search">Known location</label>
+        <input id="travel-search"
+               class="eve-search-input"
+               value="@_travelQuery"
+               @oninput="SearchTravel"
+               placeholder="Type a place..." />
+
+        @if (_travelResults.Count > 0)
+        {
+            <div class="eve-travel-results">
+                @foreach (var location in _travelResults)
+                {
+                    <button type="button"
+                            class="eve-travel-result"
+                            disabled="@(_busy || _activeTravel is not null)"
+                            @onclick="() => TravelTo(location)">
+                        <span>@location.Name</span>
+                        <small>@location.LocationType</small>
+                    </button>
+                }
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_travelQuery))
+        {
+            <div class="eve-panel-muted">No known travel location matches.</div>
+        }
+
+        <div class="eve-panel-footnote">
+            Search is knowledge-gated. Travel also requires an authored world route/time; Project Eve will not invent one.
+        </div>
+    </section>
+
+    <section class="eve-panel-section">
+        <div class="eve-panel-kicker">UP NEXT</div>
+        @if (_nextEvent is null)
+        {
+            <div class="eve-panel-muted">No player event currently queued.</div>
+        }
+        else
+        {
+            <div class="eve-panel-primary">@_nextEvent.Title</div>
+            <div class="eve-panel-muted">@_nextEvent.GameTime.ToString("ddd h:mm tt")</div>
+        }
+    </section>
+</div>
+
+@code {
+    bool _busy;
+    string _status = "";
+    string _timeCommand = "";
+    string _travelQuery = "";
+    List<KnownLocationResult> _travelResults = new();
+    GameEventRecord? _nextEvent;
+    PlayerTravelJourney? _activeTravel;
+    string _travelMethod = "car";
+
+    string PlayerId => Players.Current?.Id ?? "legacy-player";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Clock.Changed += HandleClockChanged;
+
+        _travelMethod = NormalizeTransport(
+            Players.Current?.Transport);
+
+        await RefreshNextEvent();
+        await RefreshTravel();
+    }
+
+    async Task AdvanceMinutes(int minutes)
+    {
+        await RunTimeAction(() => WorldTime.AdvanceByAsync(
+            PlayerId,
+            TimeSpan.FromMinutes(minutes),
+            "side_panel_wait"));
+    }
+
+    async Task SleepToMorning()
+    {
+        var target = GameTimeTextCommandParser.NextLocalTime(
+            Clock.Now,
+            7,
+            0,
+            forceTomorrow: true);
+
+        await RunTimeAction(() => WorldTime.AdvanceUntilAsync(
+            PlayerId,
+            target,
+            "sleep_to_morning"));
+    }
+
+    async Task NextEvent()
+        => await RunTimeAction(() => GameplayTime.NextEventAsync(PlayerId));
+
+    async Task RunTimeCommand()
+    {
+        var command = _timeCommand.Trim();
+        if (command.Length == 0)
+            return;
+
+        var lower = command.ToLowerInvariant();
+        if (lower == "next event" ||
+            lower == "next" ||
+            lower.Contains("something happens") ||
+            lower.Contains("contact me") ||
+            lower.Contains("contacts me"))
+        {
+            await RunTimeAction(() => GameplayTime.NextEventAsync(PlayerId));
+            return;
+        }
+
+        await RunTimeAction(() => TimeCommands.ExecuteAsync(WorldTime, PlayerId, command));
+    }
+
+    async Task OnTimeCommandKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await RunTimeCommand();
+    }
+
+    async Task RunTimeAction(Func<Task<GameTimeAdvanceResult>> action)
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            var result = await action();
+            _status = result.Message;
+            await Travel.FinalizeDueTravelsAsync(Clock.Now);
+            await RefreshNextEvent();
+            await RefreshTravel();
+
+        }
+        catch (Exception ex)
+        {
+            _status = "Time error: " + ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    async Task SearchTravel(ChangeEventArgs e)
+    {
+        _travelQuery = e.Value?.ToString() ?? "";
+        if (string.IsNullOrWhiteSpace(_travelQuery))
+        {
+            _travelResults.Clear();
+            return;
+        }
+
+        _travelResults = (await Locations.SearchKnownAsync(
+            PlayerId,
+            _travelQuery,
+            8)).ToList();
+    }
+
+    async Task TravelTo(KnownLocationResult location)
+    {
+        if (_busy || _activeTravel is not null)
+            return;
+
+        _busy = true;
+        try
+        {
+            var player = Players.Current;
+            if (player == null)
+            {
+                _status = "No active player.";
+                return;
+            }
+
+            var result = await Travel.StartTravelAsync(
+                new PlayerTravelStartRequest
+                {
+                    PlayerId = PlayerId,
+                    PlayerName = string.IsNullOrWhiteSpace(player.FullName)
+                        ? player.DisplayName
+                        : player.FullName,
+                    DestinationLocationId = location.LocationId,
+                    Method = _travelMethod
+                });
+
+            _status = result.Message;
+            await RefreshNextEvent();
+            await RefreshTravel();
+
+            if (result.Arrived)
+            {
+                Nav.NavigateTo(
+                    "/in-person?location=" +
+                    Uri.EscapeDataString(location.LocationId));
+            }
+            else if (result.Started)
+            {
+                // Do not leave the old InPerson page visually open after the
+                // body has physically departed the scene.
+                Nav.NavigateTo("/");
+            }
+        }
+        catch (Exception ex)
+        {
+            _status = "Travel error: " + ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    async Task ContinueTravel()
+    {
+        if (_busy || _activeTravel is null)
+            return;
+
+        _busy = true;
+        try
+        {
+            string destination = _activeTravel.DestinationLocationId;
+
+            var result = await Travel.ContinueTravelAsync(PlayerId);
+            _status = result.Message;
+
+            await RefreshNextEvent();
+            await RefreshTravel();
+
+            if (result.Arrived)
+            {
+                Nav.NavigateTo(
+                    "/in-person?location=" +
+                    Uri.EscapeDataString(destination));
+            }
+        }
+        catch (Exception ex)
+        {
+            _status = "Travel error: " + ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    async Task RefreshTravel()
+    {
+        try
+        {
+            _activeTravel = await Travel.GetActiveTravelAsync(PlayerId);
+        }
+        catch
+        {
+            _activeTravel = null;
+        }
+    }
+
+
+    static string NormalizeTransport(string? transport)
+        => transport?.Trim().ToLowerInvariant() switch
+        {
+            "truck" => "truck",
+            "bike" => "bike",
+            "bicycle" => "bike",
+            "walk" => "walk",
+            "walking" => "walk",
+            "bus" => "bus",
+            _ => "car"
+        };
+
+    async Task RefreshNextEvent()
+    {
+        try
+        {
+            _nextEvent = await Clock.PeekNextPlayerEventAsync(PlayerId);
+        }
+        catch
+        {
+            _nextEvent = null;
+        }
+    }
+
+    void HandleClockChanged(GameTimeSnapshot snapshot)
+        => _ = InvokeAsync(async () =>
+        {
+            await RefreshNextEvent();
+            await RefreshTravel();
+            StateHasChanged();
+        });
+
+    public void Dispose()
+    {
+        Clock.Changed -= HandleClockChanged;
+    }
+}

@@ -1,0 +1,57 @@
+PHASE 8 USAGE EXAMPLE
+
+Assume Eve (NPC 1) owns claim 42 and is considering telling Lisa (NPC 3).
+
+var decision = await social.DecideAsync(new NpcSocialDecisionRequest
+{
+    SourceNpcId = 1,
+    ClaimId = 42,
+    TargetNpcId = 3,
+    PlayerId = "player:ryan",
+    SceneId = "sinclair-coffee-main",
+    Channel = "in_person",
+    Motive = "vent",
+    Secrecy = 65,
+    Urgency = 35,
+    ConsequenceRisk = 55
+});
+
+Possible result:
+Action = "gossip"
+ShareScore = 67.4
+PrivacyScore = 53.1
+SuggestedVoiceLevel = "quiet"
+AudienceCount = 1
+
+The dialogue/orchestrator then uses decision.ExpressionDirective to phrase
+what Eve actually says. Phase 8 itself does not fabricate the words.
+
+After the exact spoken line exists:
+
+var executed = await social.ExecuteAsync(new NpcSocialExecutionRequest
+{
+    DecisionId = decision.DecisionId,
+    ActualText = "Ryan told me something about Adam at work, and it doesn't sound good."
+});
+
+Because this is in-person:
+- Phase 6 decides who physically heard it.
+- Lisa may hear clearly.
+- Adam across the room may hear only a fragment.
+- Phase 7 creates separate recipient knowledge from what each actually heard.
+
+CHOOSING WHO EVE IS MOST LIKELY TO TELL
+
+var options = await social.RankRecipientsAsync(new NpcSocialRecipientSearchRequest
+{
+    SourceNpcId = 1,
+    ClaimId = 42,
+    SceneId = "sinclair-coffee-main",
+    Motive = "seek_advice",
+    Secrecy = 70,
+    ConsequenceRisk = 60
+});
+
+Only NPCs Eve currently perceives in that Phase 6 scene are ranked.
+A hidden NPC is not treated as someone Eve intentionally chooses to talk to,
+but that hidden NPC may still overhear once Eve actually speaks.

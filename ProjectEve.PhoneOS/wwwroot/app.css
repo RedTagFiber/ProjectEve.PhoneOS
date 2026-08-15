@@ -1,0 +1,275 @@
+/* ============================================================
+   Project Eve PhoneOS v3 shell
+   One information model:
+   - desktop: left info + main app + right tools are visible
+   - phone/tablet: main app is full-screen; side panels are swipe drawers
+   ============================================================ */
+
+:root {
+    --eve-bg: #07070a;
+    --eve-panel: #0f1015;
+    --eve-panel-2: #14151c;
+    --eve-line: rgba(255,255,255,.09);
+    --eve-line-strong: rgba(255,255,255,.15);
+    --eve-text: #f5f5f7;
+    --eve-muted: rgba(245,245,247,.58);
+    --eve-soft: rgba(245,245,247,.38);
+    --eve-accent: #7ea2ff;
+    --eve-accent-2: #b48cff;
+    --eve-safe-top: env(safe-area-inset-top, 0px);
+    --eve-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; min-height: 100dvh; background: var(--eve-bg); color: var(--eve-text); }
+body { overflow-x: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+a { color: inherit; }
+button, input, textarea { font: inherit; }
+h1:focus { outline: none; }
+
+.valid.modified:not([type=checkbox]) { outline: 1px solid #26b050; }
+.invalid { outline: 1px solid #e50000; }
+.validation-message { color: #e50000; }
+.blazor-error-boundary { background: #b32121; padding: 1rem 1rem 1rem 1.25rem; color: white; }
+.blazor-error-boundary::after { content: "An error has occurred."; }
+
+.page-transition { min-height: 100dvh; animation: evePageIn .2s ease both; }
+@keyframes evePageIn { from { opacity: .6; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .page-transition { animation: none; } }
+
+/* ---------- shared shell ---------- */
+.eve-app-shell { min-height: 100dvh; background: var(--eve-bg); }
+.eve-app-main { min-width: 0; min-height: 100dvh; position: relative; overflow: hidden; }
+.eve-desktop-left, .eve-desktop-right { display: none; }
+
+.eve-panel {
+    min-height: 100%;
+    padding: 1rem;
+    color: var(--eve-text);
+    background: linear-gradient(180deg, rgba(19,20,27,.98), rgba(10,10,14,.98));
+}
+.eve-panel-brand { font-size: .76rem; letter-spacing: .18em; font-weight: 800; margin-bottom: .9rem; }
+.eve-panel-nav { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: .35rem; }
+.eve-panel-nav a { text-decoration: none; color: var(--eve-muted); padding: .55rem .6rem; border: 1px solid transparent; border-radius: .7rem; font-size: .78rem; }
+.eve-panel-nav a:hover { color: var(--eve-text); background: rgba(255,255,255,.05); border-color: var(--eve-line); }
+.eve-panel-section { border-top: 1px solid var(--eve-line); padding-top: .9rem; margin-top: .9rem; }
+.eve-panel-kicker { color: var(--eve-soft); font-size: .64rem; font-weight: 800; letter-spacing: .13em; margin-bottom: .4rem; }
+.eve-panel-primary { font-size: .92rem; font-weight: 650; }
+.eve-panel-muted { color: var(--eve-muted); font-size: .74rem; margin-top: .2rem; line-height: 1.35; }
+.eve-panel-footnote { color: var(--eve-soft); font-size: .67rem; line-height: 1.35; margin-top: .7rem; }
+.eve-presence-section { min-height: 8rem; }
+.eve-presence-row { display: flex; justify-content: space-between; gap: .75rem; padding: .55rem 0; border-bottom: 1px solid rgba(255,255,255,.055); }
+.eve-presence-name { font-size: .82rem; font-weight: 600; }
+.eve-distance { color: var(--eve-accent); font-size: .72rem; white-space: nowrap; }
+
+.eve-game-date { font-size: .95rem; font-weight: 650; }
+.eve-game-clock { font-size: 2rem; font-weight: 760; letter-spacing: -.04em; margin: .08rem 0 .15rem; }
+.eve-primary-action, .eve-time-grid button, .eve-inline-field button {
+    border: 1px solid var(--eve-line-strong); background: rgba(255,255,255,.055); color: var(--eve-text); border-radius: .75rem; cursor: pointer;
+}
+.eve-primary-action { width: 100%; padding: .72rem; background: linear-gradient(135deg, rgba(93,128,255,.26), rgba(174,110,255,.18)); border-color: rgba(126,162,255,.35); font-weight: 700; }
+.eve-time-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .4rem; margin-top: .45rem; }
+.eve-time-grid button { padding: .58rem .4rem; font-size: .75rem; }
+.eve-primary-action:hover, .eve-time-grid button:hover, .eve-inline-field button:hover { background-color: rgba(255,255,255,.1); }
+.eve-field-label { display: block; font-size: .68rem; color: var(--eve-muted); margin: .75rem 0 .3rem; }
+.eve-inline-field { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: .35rem; }
+.eve-inline-field input, .eve-search-input {
+    width: 100%; min-width: 0; border: 1px solid var(--eve-line); border-radius: .72rem; padding: .62rem .68rem; background: rgba(0,0,0,.26); color: var(--eve-text); outline: none;
+}
+.eve-inline-field button { padding: .55rem .7rem; }
+.eve-tool-status { margin-top: .55rem; color: var(--eve-accent); font-size: .72rem; line-height: 1.35; }
+.eve-travel-results { display: grid; gap: .28rem; margin-top: .45rem; }
+.eve-travel-result { display: flex; align-items: center; justify-content: space-between; gap: .65rem; width: 100%; border: 1px solid var(--eve-line); background: rgba(255,255,255,.035); color: var(--eve-text); border-radius: .7rem; padding: .55rem .6rem; cursor: pointer; text-align: left; }
+.eve-travel-result small { color: var(--eve-muted); }
+
+/* Mobile drawer controls. Swiping right opens left info; swiping left opens right tools. */
+.eve-mobile-edge { position: fixed; top: calc(.55rem + var(--eve-safe-top)); z-index: 74; }
+.eve-mobile-edge-left { left: .55rem; }
+.eve-mobile-edge-right { right: .55rem; }
+.eve-mobile-edge button, .eve-drawer-close { width: 2.3rem; height: 2.3rem; border-radius: 999px; border: 1px solid var(--eve-line); background: rgba(12,12,16,.78); color: var(--eve-text); backdrop-filter: blur(14px); cursor: pointer; }
+.eve-mobile-drawer { position: fixed; top: 0; bottom: 0; z-index: 90; width: min(86vw, 340px); overflow-y: auto; transition: transform .2s ease; box-shadow: 0 0 44px rgba(0,0,0,.55); }
+.eve-mobile-drawer.left { left: 0; transform: translateX(-103%); }
+.eve-mobile-drawer.right { right: 0; transform: translateX(103%); }
+.eve-mobile-drawer.open { transform: translateX(0); }
+.eve-mobile-drawer .eve-panel { min-height: 100dvh; padding-top: calc(3.7rem + var(--eve-safe-top)); padding-bottom: calc(1rem + var(--eve-safe-bottom)); }
+.eve-drawer-close { position: absolute; z-index: 2; top: calc(.65rem + var(--eve-safe-top)); right: .65rem; font-size: 1.35rem; }
+.eve-drawer-scrim { position: fixed; inset: 0; z-index: 80; border: 0; background: rgba(0,0,0,.54); padding: 0; }
+
+/* Kill the fake-device chrome everywhere, including pages not yet rebuilt. */
+.phone-stage { min-height: 100dvh !important; height: 100dvh !important; width: 100% !important; padding: 0 !important; margin: 0 !important; display: block !important; background: var(--eve-bg) !important; overflow: hidden !important; }
+.phone-bezel { width: 100% !important; max-width: none !important; height: 100dvh !important; min-height: 100dvh !important; padding: 0 !important; margin: 0 !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; overflow: hidden !important; }
+.phone-notch { display: none !important; }
+.phone-screen, .home-screen, .msg-screen, .grp-screen { width: 100% !important; max-width: none !important; min-height: 100dvh !important; height: 100dvh !important; border-radius: 0 !important; }
+
+/* ---------- Messages v3 ---------- */
+.messages-v3 { min-height: 100dvh; height: 100dvh; display: grid; grid-template-columns: minmax(260px, 34%) minmax(0,1fr); background: #08090d; overflow: hidden; }
+.messages-list { min-width: 0; border-right: 1px solid var(--eve-line); background: #0d0e13; display: flex; flex-direction: column; min-height: 0; }
+.messages-list-head { display: flex; align-items: end; justify-content: space-between; gap: 1rem; padding: 1.25rem 1rem .7rem; }
+.messages-kicker { font-size: .62rem; color: var(--eve-soft); letter-spacing: .14em; font-weight: 800; }
+.messages-list-head h1 { margin: .05rem 0 0; font-size: 1.5rem; }
+.messages-home-link { color: var(--eve-accent); font-size: .78rem; text-decoration: none; }
+.messages-search-wrap { padding: 0 .8rem .7rem; }
+.messages-search { width: 100%; border: 1px solid var(--eve-line); border-radius: .75rem; background: rgba(255,255,255,.055); color: var(--eve-text); padding: .65rem .75rem; outline: none; }
+.messages-contact-list { overflow-y: auto; min-height: 0; }
+.messages-contact-row { width: 100%; border: 0; border-top: 1px solid rgba(255,255,255,.05); background: transparent; color: var(--eve-text); display: grid; grid-template-columns: 42px minmax(0,1fr); gap: .7rem; padding: .72rem .85rem; text-align: left; cursor: pointer; }
+.messages-contact-row:hover, .messages-contact-row.active { background: rgba(255,255,255,.06); }
+.messages-contact-avatar, .messages-thread-avatar { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(135deg, rgba(126,162,255,.85), rgba(180,140,255,.72)); font-size: .78rem; font-weight: 800; }
+.messages-contact-copy { min-width: 0; }
+.messages-contact-topline { display: flex; justify-content: space-between; gap: .6rem; align-items: baseline; }
+.messages-contact-topline strong { font-size: .86rem; }
+.messages-contact-topline span { color: var(--eve-soft); font-size: .64rem; white-space: nowrap; }
+.messages-preview { color: var(--eve-muted); font-size: .73rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: .18rem; }
+.messages-empty-list { color: var(--eve-muted); padding: 1rem; font-size: .8rem; }
+.messages-thread { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #06070a; }
+.messages-thread-empty { flex: 1; display: grid; place-items: center; color: var(--eve-muted); }
+.messages-thread-head { display: flex; align-items: center; gap: .65rem; min-height: 68px; padding: .7rem 1rem; border-bottom: 1px solid var(--eve-line); background: rgba(14,15,20,.92); }
+.messages-thread-avatar { width: 38px; height: 38px; }
+.messages-thread-title { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.messages-thread-title strong { font-size: .9rem; }
+.messages-thread-title span { color: var(--eve-muted); font-size: .68rem; }
+.messages-inperson-link { color: var(--eve-accent); text-decoration: none; font-size: .75rem; }
+.messages-mobile-back { display: none; background: transparent; border: 0; color: var(--eve-accent); font-size: 1.8rem; cursor: pointer; }
+.messages-log { flex: 1; overflow-y: auto; padding: 1rem max(1rem, calc((100% - 760px)/2)); display: flex; flex-direction: column; gap: .48rem; }
+.messages-log-empty { margin: auto; color: var(--eve-muted); }
+.message-line { max-width: min(72%, 570px); display: flex; flex-direction: column; }
+.message-line.mine { align-self: flex-end; align-items: flex-end; }
+.message-line.theirs { align-self: flex-start; align-items: flex-start; }
+.message-bubble { border-radius: 1rem; padding: .5rem .72rem; font-size: .9rem; line-height: 1.35; }
+.message-line.mine .message-bubble { background: #1d6fd6; }
+.message-line.theirs .message-bubble { background: #1a1b20; }
+.message-bubble time { display: block; font-size: .6rem; opacity: .55; margin-top: .18rem; }
+.message-delivery, .message-pending { color: var(--eve-soft); font-size: .6rem; margin-top: .14rem; }
+.message-pending { align-self: center; }
+.messages-composer { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: .5rem; padding: .75rem max(1rem, calc((100% - 760px)/2)) calc(.75rem + var(--eve-safe-bottom)); border-top: 1px solid var(--eve-line); background: rgba(13,14,18,.97); }
+.messages-composer input { width: 100%; min-width: 0; border: 1px solid var(--eve-line); border-radius: 1rem; background: rgba(255,255,255,.055); color: var(--eve-text); padding: .7rem .85rem; outline: none; }
+.messages-composer button { border: 0; border-radius: .85rem; background: #1d6fd6; color: #fff; padding: .6rem .85rem; cursor: pointer; }
+
+/* ---------- In Person v3: one chronological text stream ---------- */
+.scene-v3 { min-height: 100dvh; height: 100dvh; display: flex; flex-direction: column; background-color: #08090c; background-position: center center; background-size: cover; background-repeat: no-repeat; overflow: hidden; }
+.scene-topbar { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem 1rem; border-bottom: 1px solid rgba(255,255,255,.10); background: rgba(8,9,12,.68); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.scene-location { font-weight: 750; font-size: 1rem; }
+.scene-meta { color: var(--eve-muted); font-size: .7rem; margin-top: .15rem; }
+.scene-top-actions { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; justify-content: flex-end; }
+.scene-top-actions a { color: var(--eve-accent); font-size: .75rem; text-decoration: none; }
+.scene-voice { border: 1px solid var(--eve-line); background: rgba(255,255,255,.04); color: var(--eve-text); border-radius: 999px; padding: .36rem .65rem; font-size: .7rem; cursor: pointer; }
+.scene-voice.on { border-color: rgba(78,205,126,.45); background: rgba(78,205,126,.13); }
+.scene-thinking { color: var(--eve-muted); font-size: .7rem; }
+.scene-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    /* Keep the location visible, but lower the visual noise around the reading area. */
+    background:
+        linear-gradient(90deg,
+            rgba(3,4,7,.46) 0%,
+            rgba(3,4,7,.25) 16%,
+            rgba(3,4,7,.10) 34%,
+            rgba(3,4,7,.10) 66%,
+            rgba(3,4,7,.25) 84%,
+            rgba(3,4,7,.46) 100%);
+}
+.scene-stream {
+    width: min(980px, 100%);
+    min-height: 100%;
+    margin: 0 auto;
+    padding: 1rem clamp(1rem,3vw,2.2rem) 2rem;
+
+    /* One continuous translucent reading surface — NOT message bubbles. */
+    background:
+        linear-gradient(180deg,
+            rgba(7,8,12,.56) 0%,
+            rgba(7,8,12,.49) 22%,
+            rgba(7,8,12,.46) 72%,
+            rgba(7,8,12,.58) 100%);
+    border-left: 1px solid rgba(255,255,255,.045);
+    border-right: 1px solid rgba(255,255,255,.045);
+    box-shadow: 0 0 42px rgba(0,0,0,.20);
+    backdrop-filter: blur(3px) saturate(.88);
+    -webkit-backdrop-filter: blur(3px) saturate(.88);
+}
+.scene-entry {
+    padding: .52rem .08rem .66rem;
+    border-bottom: 1px solid rgba(255,255,255,.045);
+}
+.scene-entry.actor { color: hsl(var(--actor-hue) var(--entry-sat) var(--entry-light)); }
+.scene-entry.world { color: #c8cbd3; padding: .75rem 0 .85rem; }
+.scene-entry.scene-opening { font-size: .98rem; color: #ededf2; }
+.scene-entry.scene-update { color: #c5cad4; }
+.scene-entry.speech .scene-entry-text { font-size: 1rem; font-weight: 650; font-style: normal; opacity: 1; }
+.scene-entry.action .scene-entry-text { font-size: .91rem; font-weight: 520; font-style: italic; opacity: .92; }
+.scene-entry.body-language .scene-entry-text { font-size: .87rem; font-weight: 430; opacity: .68; font-style: italic; }
+.scene-entry.speech .scene-entry-meta { opacity: .72; }
+.scene-entry.action .scene-entry-meta { opacity: .60; }
+.scene-entry.body-language .scene-entry-meta { opacity: .48; }
+.scene-entry-meta { display: flex; align-items: baseline; gap: .3rem; margin-bottom: .18rem; font-size: .62rem; text-transform: uppercase; letter-spacing: .08em; opacity: .62; }
+.scene-entry-meta time { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.scene-world-meta { color: var(--eve-soft); }
+.scene-entry-text {
+    line-height: 1.56;
+    white-space: pre-wrap;
+    /* Strong enough for detailed photos without making the text glow. */
+    text-shadow:
+        0 1px 2px rgba(0,0,0,.98),
+        0 2px 7px rgba(0,0,0,.72);
+}
+.scene-composer-v3 { border-top: 1px solid rgba(255,255,255,.10); background: rgba(8,9,12,.76); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: .65rem max(.8rem, calc((100% - 980px)/2)) calc(.7rem + var(--eve-safe-bottom)); display: grid; gap: .48rem; }
+.scene-input-row { display: grid; grid-template-columns: 58px minmax(0,1fr) auto; gap: .55rem; align-items: center; }
+.scene-input-row label { color: var(--eve-soft); font-size: .64rem; letter-spacing: .1em; font-weight: 800; }
+.scene-input-row textarea, .scene-input-row input { width: 100%; min-width: 0; border: 1px solid var(--eve-line); background: rgba(255,255,255,.045); color: var(--eve-text); border-radius: .75rem; outline: none; padding: .58rem .7rem; resize: none; }
+.scene-input-row textarea { min-height: 44px; max-height: 90px; }
+.scene-input-row button { border: 0; border-radius: .75rem; background: linear-gradient(135deg, #4b79db, #7a5fc7); color: #fff; padding: .65rem .9rem; cursor: pointer; }
+.action-row { grid-template-columns: 58px minmax(0,1fr); }
+
+/* ---------- desktop = three useful columns, no dead background ---------- */
+@media (min-width: 1100px) {
+    .eve-app-shell { display: grid; grid-template-columns: 245px minmax(0,1fr) 300px; height: 100dvh; overflow: hidden; }
+    .eve-desktop-left, .eve-desktop-right { display: block; min-height: 0; overflow-y: auto; }
+    .eve-desktop-left { border-right: 1px solid var(--eve-line); }
+    .eve-desktop-right { border-left: 1px solid var(--eve-line); }
+    .eve-app-main, .page-transition { height: 100dvh; min-height: 100dvh; }
+    .eve-mobile-edge, .eve-mobile-drawer, .eve-drawer-scrim { display: none !important; }
+
+    /* Old phone-styled pages fill the center workspace. */
+    .phone-stage, .phone-bezel, .phone-screen, .home-screen, .msg-screen, .grp-screen { height: 100dvh !important; min-height: 100dvh !important; }
+}
+
+@media (min-width: 1500px) {
+    .eve-app-shell { grid-template-columns: 270px minmax(0,1fr) 330px; }
+}
+
+/* ---------- phone/tablet ---------- */
+@media (max-width: 1099px) {
+    .eve-app-main, .page-transition { min-height: 100dvh; height: 100dvh; }
+    .messages-v3 { display: block; }
+    .messages-list, .messages-thread { height: 100dvh; }
+    .messages-list.mobile-hidden, .messages-thread.mobile-hidden { display: none; }
+    .messages-mobile-back { display: inline-block; }
+    .messages-list-head { padding-top: calc(3.55rem + var(--eve-safe-top)); }
+    .messages-thread-head { padding-top: calc(.7rem + var(--eve-safe-top)); min-height: calc(68px + var(--eve-safe-top)); padding-left: 3.15rem; }
+    .messages-log { padding-left: .8rem; padding-right: .8rem; }
+    .message-line { max-width: 88%; }
+    .messages-composer { padding-left: .7rem; padding-right: .7rem; }
+
+    .scene-topbar { padding-top: calc(3.4rem + var(--eve-safe-top)); align-items: flex-start; }
+    .scene-top-actions { gap: .35rem; }
+    .scene-stream {
+        padding-left: .85rem;
+        padding-right: .85rem;
+        background:
+            linear-gradient(180deg,
+                rgba(7,8,12,.64) 0%,
+                rgba(7,8,12,.57) 24%,
+                rgba(7,8,12,.54) 72%,
+                rgba(7,8,12,.66) 100%);
+    }
+    .scene-composer-v3 { padding-left: .65rem; padding-right: .65rem; }
+    .scene-input-row, .action-row { grid-template-columns: 48px minmax(0,1fr); }
+    .say-row button { grid-column: 2; justify-self: end; }
+}
+
+@media (max-width: 560px) {
+    .eve-mobile-drawer { width: min(91vw, 330px); }
+    .scene-topbar { gap: .5rem; }
+    .scene-top-actions a { display: none; }
+    .scene-entry.speech .scene-entry-text { font-size: .96rem; }
+}

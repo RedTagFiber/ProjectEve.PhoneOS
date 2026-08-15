@@ -1,0 +1,580 @@
+﻿@page "/setup"
+@using ProjectEve.PhoneOS.Services
+@inject PlayerProfileService Players
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>New Game · Player</PageTitle>
+
+<div class="su-root">
+    <div class="su-shell">
+        <header class="su-top">
+            <div class="su-brand">Project Eve</div>
+            <div class="su-step">@StepLabel</div>
+        </header>
+
+        <div class="su-progress">
+            @for (int i = 0; i < TotalSteps; i++)
+            {
+                <span class="su-dot @(i < _step ? "done" : i == _step ? "now" : null)"></span>
+            }
+        </div>
+
+        <div class="su-card page-transition">
+            @switch (_step)
+            {
+                case 0:
+                    <h1>Who are you?</h1>
+                    <p class="su-lead">This is the player Eve will know. You can refine later.</p>
+                    <label>First name</label>
+                    <input class="su-input" @bind="_p.FirstName" placeholder="Ryan" />
+                    <label>Last name</label>
+                    <input class="su-input" @bind="_p.LastName" placeholder="Sinclair" />
+                    <label>What should Eve call you?</label>
+                    <input class="su-input" @bind="_p.PreferredName" placeholder="optional nickname" />
+                    <label>Gender</label>
+                    <div class="su-chips">
+                        @foreach (var g in _genders)
+                        {
+                            <button type="button" class="su-chip @(_p.Gender == g ? "on" : null)" @onclick="() => _p.Gender = g">@g</button>
+                        }
+                    </div>
+                    <label>Birth date</label>
+                    <input class="su-input" type="date" value="@_birthStr" @onchange="OnBirth" />
+                    break;
+
+                case 1:
+                    <h1>Look</h1>
+                    <p class="su-lead">Used for portraits and “does this feel like you” checks.</p>
+                    <label>Hair</label>
+                    <div class="su-row2">
+                        <select class="su-input" @bind="_p.HairColor">
+                            @foreach (var x in _hairColors)
+                            {
+                                <option>@x</option>
+                            }
+                        </select>
+                        <select class="su-input" @bind="_p.HairStyle">
+                            @foreach (var x in _hairStyles)
+                            {
+                                <option>@x</option>
+                            }
+                        </select>
+                    </div>
+                    <label>Eyes · skin</label>
+                    <div class="su-row2">
+                        <select class="su-input" @bind="_p.EyeColor">
+                            @foreach (var x in _eyeColors)
+                            {
+                                <option>@x</option>
+                            }
+                        </select>
+                        <select class="su-input" @bind="_p.SkinTone">
+                            @foreach (var x in _skins)
+                            {
+                                <option>@x</option>
+                            }
+                        </select>
+                    </div>
+                    <label>Height · build</label>
+                    <div class="su-row2">
+                        <select class="su-input" @bind="_p.HeightBand">
+                            <option>Short</option>
+                            <option>Average</option>
+                            <option>Tall</option>
+                        </select>
+                        <select class="su-input" @bind="_p.BodyShape">
+                            @foreach (var x in _bodies)
+                            {
+                                <option>@x</option>
+                            }
+                        </select>
+                    </div>
+                    <label>Everyday style</label>
+                    <div class="su-chips">
+                        @foreach (var s in _styles)
+                        {
+                            <button type="button" class="su-chip @(_p.StyleLook == s ? "on" : null)" @onclick="() => _p.StyleLook = s">@s</button>
+                        }
+                    </div>
+                    <label>Glasses</label>
+                    <select class="su-input" @bind="_p.GlassesType">
+                        <option>None</option>
+                        <option>Reading</option>
+                        <option>Always</option>
+                        <option>Fashion</option>
+                    </select>
+                    <label>Anything distinctive? (scar, tattoo — short)</label>
+                    <input class="su-input" @bind="_p.Distinguishing" placeholder="optional" />
+                    break;
+
+                case 2:
+                    <h1>Work & money</h1>
+                    <p class="su-lead">Starting pressure and free time.</p>
+                    <label>Job title</label>
+                    <input class="su-input" @bind="_p.JobTitle" placeholder="Warehouse lead / nurse / student…" />
+                    <label>Employer / place</label>
+                    <input class="su-input" @bind="_p.Employer" placeholder="optional" />
+                    <label>Shift</label>
+                    <div class="su-chips">
+                        @foreach (var s in new[] { "Days", "Nights", "Mixed", "Unemployed" })
+                        {
+                            <button type="button" class="su-chip @(_p.WorkShift == s ? "on" : null)" @onclick="() => _p.WorkShift = s">@s</button>
+                        }
+                    </div>
+                    <label>Starting cash / bank / debt</label>
+                    <div class="su-row3">
+                        <input class="su-input" type="number" @bind="_p.StartingCash" />
+                        <input class="su-input" type="number" @bind="_p.StartingBank" />
+                        <input class="su-input" type="number" @bind="_p.StartingDebt" />
+                    </div>
+                    <p class="su-hint">Cash · Bank · Debt</p>
+                    break;
+
+                case 3:
+                    <h1>Home base</h1>
+                    <p class="su-lead">Same town as Eve by default — Bellefontaine area.</p>
+                    <label>Home type</label>
+                    <div class="su-chips">
+                        @foreach (var h in new[] { "Apartment", "House", "Farm", "Downtown loft" })
+                        {
+                            <button type="button" class="su-chip @(_p.HomeType == h ? "on" : null)" @onclick="() => _p.HomeType = h">@h</button>
+                        }
+                    </div>
+                    <label>Area</label>
+                    <div class="su-chips">
+                        @foreach (var a in new[] { "Downtown", "City limits", "Country" })
+                        {
+                            <button type="button" class="su-chip @(_p.HomeArea == a ? "on" : null)" @onclick="() => _p.HomeArea = a">@a</button>
+                        }
+                    </div>
+                    <label>Town</label>
+                    <input class="su-input" @bind="_p.HomeTown" />
+                    <label>How you get around</label>
+                    <div class="su-chips">
+                        @foreach (var t in new[] { "Car", "Truck", "Bike", "Walk", "Bus" })
+                        {
+                            <button type="button" class="su-chip @(_p.Transport == t ? "on" : null)" @onclick="() => _p.Transport = t">@t</button>
+                        }
+                    </div>
+                    break;
+
+                case 4:
+                    <h1>Play style</h1>
+                    <p class="su-lead">Biases what the world throws at you. Not locked forever.</p>
+                    <label>Content rating</label>
+                    <div class="su-chips">
+                        <button type="button" class="su-chip @(_p.ContentRating == "PG" ? "on" : null)" @onclick='() => _p.ContentRating = "PG"'>PG</button>
+                        <button type="button" class="su-chip @(_p.ContentRating == "Plus18" ? "on" : null)" @onclick='() => _p.ContentRating = "Plus18"'>+18</button>
+                    </div>
+                    <label>Lean into</label>
+                    <div class="su-toggles">
+                        <label class="su-tog"><input type="checkbox" @bind="_p.PrefRealLife" /> Real life / small town</label>
+                        <label class="su-tog"><input type="checkbox" @bind="_p.PrefRomance" /> Romance</label>
+                        <label class="su-tog"><input type="checkbox" @bind="_p.PrefDrama" /> Drama</label>
+                        <label class="su-tog"><input type="checkbox" @bind="_p.PrefComedy" /> Comedy</label>
+                        <label class="su-tog"><input type="checkbox" @bind="_p.PrefCrime" /> Crime / risk</label>
+                    </div>
+                    <label>Favorite sport · team</label>
+                    <div class="su-row2">
+                        <input class="su-input" @bind="_p.FavoriteSport" />
+                        <input class="su-input" @bind="_p.FavoriteTeam" />
+                    </div>
+                    break;
+
+                case 5:
+                    <h1>You & Eve</h1>
+                    <p class="su-lead">How the first thread starts. She still has her own history.</p>
+                    <label>Where you stand</label>
+                    <div class="su-chips">
+                        @foreach (var r in new[] { "Just met", "Friends", "Dating", "Complicated" })
+                        {
+                            <button type="button" class="su-chip @(_p.EveRelationship == r ? "on" : null)" @onclick="() => _p.EveRelationship = r">@r</button>
+                        }
+                    </div>
+                    <label>How you met</label>
+                    <input class="su-input" @bind="_p.EveHowMet" placeholder="Coffee shop, work, mutual friend…" />
+                    <label>Starting chemistry (@_p.EveChemistry)</label>
+                    <input class="su-range" type="range" min="1" max="10" @bind="_p.EveChemistry" @bind:event="oninput" />
+                    <label>Starting trust seed (@_p.EveTrustSeed)</label>
+                    <input class="su-range" type="range" min="1" max="10" @bind="_p.EveTrustSeed" @bind:event="oninput" />
+                    <label>Background (short — optional)</label>
+                    <textarea class="su-area" rows="3" @bind="_p.BackgroundNote" placeholder="What shaped you before this town…"></textarea>
+                    break;
+
+                default:
+                    <h1>Ready</h1>
+                    <p class="su-lead">Check this once. Then the phone unlocks.</p>
+                    <div class="su-summary">
+                        <div><span>Name</span><b>@_p.DisplayName</b></div>
+                        <div><span>Age</span><b>@_p.Age</b></div>
+                        <div><span>Home</span><b>@_p.HomeType · @_p.HomeArea</b></div>
+                        <div><span>Work</span><b>@(string.IsNullOrWhiteSpace(_p.JobTitle) ? "—" : _p.JobTitle)</b></div>
+                        <div><span>Rating</span><b>@_p.ContentRating</b></div>
+                        <div><span>Eve</span><b>@_p.EveRelationship · met @_p.EveHowMet</b></div>
+                        <div><span>Chem / trust</span><b>@_p.EveChemistry / @_p.EveTrustSeed</b></div>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(_error))
+                    {
+                        <p class="su-error">@_error</p>
+                    }
+                    break;
+            }
+        </div>
+
+        <footer class="su-nav">
+            @if (_step > 0)
+            {
+                <button type="button" class="su-btn ghost" @onclick="Back">Back</button>
+            }
+            else
+            {
+                <span></span>
+            }
+
+            @if (_step < TotalSteps - 1)
+            {
+                <button type="button" class="su-btn primary" @onclick="Next" disabled="@(!CanNext)">Continue</button>
+            }
+            else
+            {
+                <button type="button" class="su-btn primary" @onclick="Finish" disabled="@(!CanFinish)">Enter world</button>
+            }
+        </footer>
+    </div>
+</div>
+
+<style>
+    .su-root {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 1.25rem;
+        background: radial-gradient(ellipse at 20% 0%, rgba(215,121,69,0.18), transparent 50%), radial-gradient(ellipse at 90% 100%, rgba(80,100,180,0.15), transparent 45%), #0c0b10;
+        color: #f4efe8;
+        font-family: "Segoe UI", system-ui, sans-serif;
+    }
+
+    .su-shell {
+        width: min(440px, 100%);
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+    }
+
+    .su-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 0 0.15rem;
+    }
+
+    .su-brand {
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        font-size: 0.85rem;
+        opacity: 0.7;
+        text-transform: uppercase;
+    }
+
+    .su-step {
+        font-size: 0.8rem;
+        opacity: 0.55;
+    }
+
+    .su-progress {
+        display: flex;
+        gap: 0.35rem;
+        padding: 0 0.1rem;
+    }
+
+    .su-dot {
+        flex: 1;
+        height: 3px;
+        border-radius: 2px;
+        background: rgba(255,255,255,0.12);
+    }
+
+        .su-dot.done {
+            background: rgba(215,121,69,0.55);
+        }
+
+        .su-dot.now {
+            background: #d77945;
+        }
+
+    .su-card {
+        background: rgba(22,20,28,0.92);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 18px;
+        padding: 1.25rem 1.2rem 1.4rem;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+    }
+
+        .su-card h1 {
+            margin: 0 0 0.35rem;
+            font-size: 1.45rem;
+            font-weight: 700;
+        }
+
+    .su-lead {
+        margin: 0 0 1rem;
+        font-size: 0.9rem;
+        opacity: 0.65;
+        line-height: 1.4;
+    }
+
+    label {
+        display: block;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        opacity: 0.5;
+        margin: 0.75rem 0 0.3rem;
+    }
+
+    .su-input, .su-area, select.su-input {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(12,11,16,0.8);
+        color: #f4efe8;
+        border-radius: 12px;
+        padding: 0.7rem 0.85rem;
+        font-size: 0.95rem;
+        outline: none;
+    }
+
+        .su-input:focus, .su-area:focus {
+            border-color: rgba(215,121,69,0.55);
+        }
+
+    .su-area {
+        resize: vertical;
+        min-height: 72px;
+    }
+
+    .su-row2, .su-row3 {
+        display: grid;
+        gap: 0.5rem;
+    }
+
+    .su-row2 {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .su-row3 {
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    .su-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+
+    .su-chip {
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.04);
+        color: #f4efe8;
+        border-radius: 999px;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.85rem;
+        cursor: pointer;
+    }
+
+        .su-chip.on {
+            background: linear-gradient(135deg, #d77945, #9a3f22);
+            border-color: transparent;
+            font-weight: 600;
+        }
+
+    .su-toggles {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        margin-top: 0.25rem;
+    }
+
+    .su-tog {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.92rem;
+        opacity: 0.9;
+        text-transform: none;
+        letter-spacing: 0;
+        margin: 0;
+        cursor: pointer;
+    }
+
+    .su-range {
+        width: 100%;
+        accent-color: #d77945;
+    }
+
+    .su-hint {
+        font-size: 0.72rem;
+        opacity: 0.4;
+        margin: 0.25rem 0 0;
+    }
+
+    .su-summary {
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+        margin-top: 0.25rem;
+    }
+
+        .su-summary > div {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.45rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            font-size: 0.92rem;
+        }
+
+        .su-summary span {
+            opacity: 0.5;
+        }
+
+    .su-error {
+        color: #ff7b7b;
+        font-size: 0.88rem;
+        margin: 0.75rem 0 0;
+    }
+
+    .su-nav {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.15rem;
+    }
+
+    .su-btn {
+        border: none;
+        border-radius: 14px;
+        padding: 0.75rem 1.25rem;
+        font-weight: 700;
+        font-size: 0.95rem;
+        cursor: pointer;
+    }
+
+        .su-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .su-btn.primary {
+            background: linear-gradient(135deg, #d77945, #9a3f22);
+            color: #fff;
+            margin-left: auto;
+        }
+
+        .su-btn.ghost {
+            background: transparent;
+            color: rgba(244,239,232,0.7);
+            border: 1px solid rgba(255,255,255,0.12);
+        }
+
+    .page-transition {
+        animation: suIn 0.28s ease both;
+    }
+
+    @@keyframes suIn {
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+</style>
+
+@code {
+    const int TotalSteps = 7;
+    int _step;
+    PlayerProfile _p = new();
+    string _error = "";
+    string _birthStr = "";
+
+    static readonly string[] _genders = { "Male", "Female", "Nonbinary", "Custom" };
+    static readonly string[] _hairColors = { "Black", "Brown", "Blonde", "Red", "Auburn", "Gray", "Other" };
+    static readonly string[] _hairStyles = { "Short", "Medium", "Long", "Buzz", "Curly", "Wavy", "Other" };
+    static readonly string[] _eyeColors = { "Brown", "Blue", "Green", "Hazel", "Gray", "Other" };
+    static readonly string[] _skins = { "Fair", "Light", "Medium", "Olive", "Tan", "Brown", "Deep" };
+    static readonly string[] _bodies = { "Slim", "Average", "Athletic", "Soft", "Heavy", "Muscular" };
+    static readonly string[] _styles = { "Casual", "Work", "Athletic", "Alt", "Polished" };
+
+    string StepLabel => _step switch
+    {
+        0 => "Identity",
+        1 => "Appearance",
+        2 => "Work & money",
+        3 => "Home",
+        4 => "Play style",
+        5 => "Eve link",
+        _ => "Summary"
+    };
+
+    bool CanNext => _step switch
+    {
+        0 => !string.IsNullOrWhiteSpace(_p.FirstName),
+        _ => true
+    };
+
+    bool CanFinish => !string.IsNullOrWhiteSpace(_p.FirstName);
+
+    protected override void OnInitialized()
+    {
+        _p = Players.StartNew();
+        _p.BirthDate = new DateTime(DateTime.Now.Year - 28, 6, 15);
+        _birthStr = _p.BirthDate.Value.ToString("yyyy-MM-dd");
+        _p.PreferredName = "";
+        _p.JobTitle = "";
+        _p.HomeTown = "Bellefontaine, OH";
+        _p.FavoriteTeam = "Ohio State";
+        _p.EveHowMet = "Coffee shop";
+    }
+
+    void OnBirth(ChangeEventArgs e)
+    {
+        _birthStr = e.Value?.ToString() ?? "";
+        if (DateTime.TryParse(_birthStr, out var d))
+            _p.BirthDate = d;
+    }
+
+    void Back()
+    {
+        if (_step > 0) _step--;
+        _error = "";
+    }
+
+    void Next()
+    {
+        if (!CanNext) return;
+        if (_step == 0 && string.IsNullOrWhiteSpace(_p.PreferredName))
+            _p.PreferredName = _p.FirstName.Trim();
+        _p.WearsGlasses = _p.GlassesType is not ("None" or "");
+        _step++;
+        _error = "";
+    }
+
+    void Finish()
+    {
+        if (!CanFinish)
+        {
+            _error = "First name is required.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_p.PreferredName))
+            _p.PreferredName = _p.FirstName.Trim();
+        _p.WearsGlasses = _p.GlassesType is not ("None" or "");
+        Players.CompleteAndSave();
+        Nav.NavigateTo("/", forceLoad: false);
+    }
+}

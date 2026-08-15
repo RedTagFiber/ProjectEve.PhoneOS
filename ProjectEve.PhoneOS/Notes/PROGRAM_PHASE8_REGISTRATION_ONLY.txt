@@ -1,0 +1,6 @@
+Add this immediately after the two Phase 7 knowledge service registrations in ProjectEve.PhoneOS/Program.cs:
+
+builder.Services.AddSingleton<ProjectEve.Core.Knowledge.INpcSocialDecisionService,
+    ProjectEve.Knowledge.NpcSocialDecisionService>();
+
+Use this snippet instead of replacing Program.cs if your local Program.cs contains newer edits.

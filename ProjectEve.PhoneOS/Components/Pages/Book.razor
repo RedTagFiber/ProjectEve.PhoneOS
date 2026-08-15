@@ -1,0 +1,349 @@
+﻿@page "/book"
+
+<PageTitle>Book</PageTitle>
+
+<div class="phone-stage">
+    <div class="phone-bezel">
+        <div class="phone-notch"></div>
+
+        <div class="phone-screen book-screen">
+            <div class="status-bar">
+                <span>@DateTime.Now.ToString("h:mm")</span>
+                <span>5G · 84%</span>
+            </div>
+
+            <div class="book-top">
+                <a class="book-back" href="/">‹</a>
+                <div class="book-brand">Book</div>
+                <button type="button" class="book-icon-btn" title="Search">⌕</button>
+            </div>
+
+            @* Composer *@
+            <div class="book-composer-card">
+                <img class="book-avatar" src="@_playerPortrait" alt="You" />
+                <div class="book-composer-fake">What's on your mind?</div>
+            </div>
+
+            @* Quick actions *@
+            <div class="book-quick">
+                <span>📷 Photo</span>
+                <span>📍 Check in</span>
+                <span>😊 Feeling</span>
+            </div>
+
+            @* Feed *@
+            <div class="book-feed">
+                @foreach (var post in _posts)
+                {
+                    <article class="book-post">
+                        <header class="bp-head">
+                            <img class="book-avatar" src="@post.Avatar" alt="@post.Name" />
+                            <div class="bp-meta">
+                                <div class="bp-name">@post.Name</div>
+                                <div class="bp-sub">@post.Time · @post.Place</div>
+                            </div>
+                            <button type="button" class="bp-more">•••</button>
+                        </header>
+
+                        <p class="bp-text">@post.Text</p>
+
+                        @if (!string.IsNullOrWhiteSpace(post.Image))
+                        {
+                            <div class="bp-image" style="background-image: url('@post.Image');"></div>
+                        }
+
+                        <div class="bp-stats">
+                            <span>👍 @post.Likes</span>
+                            <span>@post.Comments comments</span>
+                        </div>
+
+                        <div class="bp-actions">
+                            <button type="button" class="@(post.Liked ? "on" : null)" @onclick="() => ToggleLike(post)">Like</button>
+                            <button type="button">Comment</button>
+                            <button type="button">Share</button>
+                        </div>
+                    </article>
+                }
+            </div>
+
+            <div class="home-indicator"></div>
+        </div>
+    </div>
+</div>
+
+@code {
+    string _playerPortrait = "/images/npcs/eve/portraits/eve_hoodie.jpg";
+
+    readonly List<FbPost> _posts = new()
+    {
+        new(
+            "Eve",
+            "/images/npcs/eve/portraits/eve_hoodie.jpg",
+            "Coffee Shop",
+            "2h",
+            "Closing shift felt longer than usual. Still love the quiet after everyone leaves.",
+            "/images/scenes/coffee-shop.png",
+            24,
+            3,
+            false),
+        new(
+            "Eve",
+            "/images/npcs/eve/portraits/eve_nightlife.jpg",
+            "Bellefontaine",
+            "Yesterday",
+            "Out for a bit. Needed the noise.",
+            "/images/scenes/eve-apartment.png",
+            56,
+            8,
+            true),
+        new(
+            "Eve",
+            "/images/npcs/eve/portraits/eve_sundress.jpg",
+            "Near town",
+            "3d",
+            "Sun finally showed up. Took the long way home.",
+            null,
+            41,
+            5,
+            false),
+    };
+
+    void ToggleLike(FbPost post)
+    {
+        post.Liked = !post.Liked;
+        post.Likes += post.Liked ? 1 : -1;
+    }
+
+    sealed class FbPost
+    {
+        public string Name { get; }
+        public string Avatar { get; }
+        public string Place { get; }
+        public string Time { get; }
+        public string Text { get; }
+        public string? Image { get; }
+        public int Likes { get; set; }
+        public int Comments { get; }
+        public bool Liked { get; set; }
+
+        public FbPost(string name, string avatar, string place, string time, string text, string? image, int likes, int comments, bool liked)
+        {
+            Name = name; Avatar = avatar; Place = place; Time = time;
+            Text = text; Image = image; Likes = likes; Comments = comments; Liked = liked;
+        }
+    }
+}
+
+<style>
+    .phone-stage {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 1.25rem;
+        background: radial-gradient(ellipse at 50% 0%, #1a1a28 0%, #07070a 55%);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    }
+
+    .phone-bezel {
+        width: min(390px, 100%);
+        border-radius: 42px;
+        padding: 10px;
+        background: linear-gradient(160deg, #3a3a40 0%, #1c1c1e 40%, #0e0e10 100%);
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 25px 50px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.12);
+        position: relative;
+    }
+
+    .phone-notch {
+        position: absolute;
+        top: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 110px;
+        height: 28px;
+        background: #000;
+        border-radius: 20px;
+        z-index: 5;
+    }
+
+    .book-screen {
+        border-radius: 34px;
+        overflow: hidden;
+        min-height: 720px;
+        height: min(780px, 92vh);
+        background: #0a0a0c;
+        color: #f5f5f7;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .status-bar {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.85rem 1.35rem 0.2rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        opacity: 0.92;
+    }
+
+    .book-top {
+        display: flex;
+        align-items: center;
+        padding: 0.25rem 0.85rem 0.55rem;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        background: #0a0a0c;
+    }
+
+    .book-back {
+        color: #f5f5f7;
+        text-decoration: none;
+        font-size: 1.5rem;
+        width: 2rem;
+    }
+
+    .book-brand {
+        flex: 1;
+        text-align: center;
+        font-weight: 800;
+        font-size: 1.2rem;
+        color: #0a84ff;
+        letter-spacing: -0.02em;
+    }
+
+    .book-icon-btn {
+        width: 2rem;
+        border: none;
+        background: transparent;
+        color: #f5f5f7;
+        font-size: 1.2rem;
+        cursor: pointer;
+    }
+
+    .book-composer-card {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        margin: 0.65rem 0.75rem 0.35rem;
+        padding: 0.55rem 0.7rem;
+        border-radius: 16px;
+        background: #141416;
+        border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .book-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex-shrink: 0;
+    }
+
+    .book-composer-fake {
+        flex: 1;
+        padding: 0.45rem 0.75rem;
+        border-radius: 999px;
+        background: #1c1c1e;
+        color: rgba(245,245,247,0.45);
+        font-size: 0.88rem;
+    }
+
+    .book-quick {
+        display: flex;
+        justify-content: space-around;
+        padding: 0.45rem 0.5rem 0.65rem;
+        font-size: 0.72rem;
+        color: rgba(245,245,247,0.65);
+        border-bottom: 8px solid #000;
+    }
+
+    .book-feed {
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .book-post {
+        padding: 0.75rem 0 0.35rem;
+        border-bottom: 8px solid #000;
+        background: #0f0f11;
+    }
+
+    .bp-head {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0 0.85rem;
+    }
+
+    .bp-meta {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .bp-name {
+        font-weight: 700;
+        font-size: 0.9rem;
+    }
+
+    .bp-sub {
+        font-size: 0.68rem;
+        opacity: 0.5;
+    }
+
+    .bp-more {
+        border: none;
+        background: transparent;
+        color: #f5f5f7;
+        cursor: pointer;
+        font-size: 1rem;
+    }
+
+    .bp-text {
+        margin: 0.55rem 0.85rem 0.5rem;
+        font-size: 0.92rem;
+        line-height: 1.4;
+    }
+
+    .bp-image {
+        width: 100%;
+        aspect-ratio: 16/10;
+        background-size: cover;
+        background-position: center;
+        background-color: #1c1c1e;
+    }
+
+    .bp-stats {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0.85rem 0.35rem;
+        font-size: 0.75rem;
+        opacity: 0.55;
+    }
+
+    .bp-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        border-top: 1px solid rgba(255,255,255,0.06);
+        margin: 0 0.5rem;
+    }
+
+        .bp-actions button {
+            border: none;
+            background: transparent;
+            color: rgba(245,245,247,0.75);
+            font-size: 0.82rem;
+            font-weight: 600;
+            padding: 0.55rem;
+            cursor: pointer;
+        }
+
+            .bp-actions button.on {
+                color: #0a84ff;
+            }
+
+    .home-indicator {
+        width: 120px;
+        height: 4px;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.35);
+        margin: 0.55rem auto 0.5rem;
+    }
+</style>

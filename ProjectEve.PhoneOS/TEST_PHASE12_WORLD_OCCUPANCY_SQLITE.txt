@@ -1,0 +1,58 @@
+PHASE 12 MANUAL TEST — WORLD OCCUPANCY / SQLITE
+(File is .txt intentionally so Visual Studio does not treat it as SQL Server.)
+
+BUILD TEST
+1. Clean Solution
+2. Build ProjectEve.Core
+3. Build ProjectEve
+4. Build ProjectEve.PhoneOS
+5. Rebuild Solution
+
+UI TEST — NO MORE UI-SPAWNED EVE
+1. Open In Person at Sinclair Coffee during a time Eve's JobProfile says she works.
+2. Eve should be present because WorldOccupancy says she is at coffee-shop.
+3. Advance game time past her shift + commute.
+4. Eve should leave the scene and disappear from PRESENT.
+5. Re-open the page. Eve must NOT magically respawn at the coffee shop.
+
+VARIABLE SHIFT TEST
+Adam's authored WorkDays is "varies".
+Phase 12 should not guess a duty day.
+Assign a specific shift using IWorldOccupancyService.AssignShiftAsync,
+then advance into that shift and verify Adam moves to fire-station.
+
+CALL-OFF TEST
+Create:
+  Kind = call_off
+  StartGameTime = before Eve's shift
+  EndGameTime = after Eve's shift
+  LocationId = empty
+
+Synchronize during the shift.
+Eve should resolve to home, not coffee-shop.
+
+OPTIONAL SQLITE INSPECTION
+Run these in a SQLite tool, not SQL Server:
+
+SELECT NpcId,HomeLocationId,WorkLocationId,ScheduleMode
+FROM NpcScheduleBinding
+ORDER BY NpcId;
+
+SELECT NpcId,NpcName,Status,CurrentLocationId,
+       OriginLocationId,DestinationLocationId,
+       DepartGameTime,ExpectedArrivalGameTime,Activity,Source,UpdatedGameTime
+FROM NpcWorldLocationState
+ORDER BY NpcId;
+
+SELECT Id,NpcId,Kind,StartGameTime,EndGameTime,LocationId,Status,Note
+FROM NpcScheduleOverride
+ORDER BY Id DESC;
+
+SELECT Id,NpcId,StartGameTime,EndGameTime,LocationId,Status,Source
+FROM NpcShiftAssignment
+ORDER BY StartGameTime,NpcId;
+
+SELECT Id,NpcId,NpcName,FromStatus,ToStatus,
+       FromLocationId,ToLocationId,GameTime,Source
+FROM NpcWorldMovementEvent
+ORDER BY Id DESC;

@@ -1,0 +1,78 @@
+-- PROJECT EVE PHASE 6 — SCENE / PERCEPTION DIAGNOSTICS
+-- Run against the same project_eve.db used by the running server.
+
+-- 1) Current active scenes
+SELECT SceneId, LocationId, DisplayName, AmbientNoise, VisualClutter,
+       UpdatedGameTime, UpdatedRealUtc
+FROM ActiveScene
+ORDER BY UpdatedRealUtc DESC;
+
+-- 2) Physical world truth: who is in the newest scene and where.
+SELECT p.SceneId, p.CharacterKey, p.NpcId, p.PlayerId, p.DisplayName,
+       p.XFeet, p.YFeet, p.RoomZone, p.AcousticZone,
+       p.Attention, p.Activity, p.Concealment, p.IsActive
+FROM ScenePresence p
+WHERE p.SceneId=(SELECT SceneId FROM ActiveScene ORDER BY UpdatedRealUtc DESC LIMIT 1)
+ORDER BY p.IsPlayer DESC, p.DisplayName;
+
+-- 3) What observers ACTUALLY perceived.
+SELECT Id, GameTime, EventKind, SourceCharacterKey, ObserverCharacterKey,
+       Quality, printf('%.2f', Confidence) AS Confidence,
+       printf('%.1f', DistanceFeet) AS Feet,
+       PerceivedText
+FROM ScenePerceptionEvidence
+ORDER BY Id DESC
+LIMIT 60;
+
+-- --------------------------------------------------------------------------
+-- OPTIONAL HIDDEN-OVERHEAR DEV TEST
+-- --------------------------------------------------------------------------
+-- This inserts Adam into the newest active scene 8 feet from the player.
+-- Concealment=.95 should keep him out of the player's PRESENT list, while
+-- same-room acoustics still let him possibly overhear speech.
+-- Reload /in-person after running this INSERT.
+--
+-- DELETE the test row afterward using the cleanup statement below.
+
+INSERT INTO ScenePresence
+    (SceneId,CharacterKey,NpcId,PlayerId,DisplayName,IsPlayer,
+     XFeet,YFeet,FacingDegrees,RoomZone,AcousticZone,
+     Attention,Activity,Concealment,IsActive,UpdatedGameTime,UpdatedRealUtc)
+SELECT
+    SceneId,'npc:2',2,NULL,'Adam Sinclair',0,
+    8,0,180,'main','main',
+    0.90,'idle',0.95,1,UpdatedGameTime,datetime('now')
+FROM ActiveScene
+ORDER BY UpdatedRealUtc DESC
+LIMIT 1
+ON CONFLICT(SceneId,CharacterKey) DO UPDATE SET
+    XFeet=8,
+    YFeet=0,
+    Attention=0.90,
+    Activity='idle',
+    Concealment=0.95,
+    IsActive=1,
+    UpdatedRealUtc=datetime('now');
+
+-- After reloading the page and saying several normal sentences to Eve:
+SELECT Id, GameTime, EventKind, SourceCharacterKey, ObserverCharacterKey,
+       Quality, printf('%.2f', Confidence) AS Confidence,
+       printf('%.1f', DistanceFeet) AS Feet,
+       PerceivedText
+FROM ScenePerceptionEvidence
+WHERE ObserverCharacterKey='npc:2'
+ORDER BY Id DESC
+LIMIT 30;
+
+-- Cleanup the optional test NPC from player-scoped In Person scenes.
+-- DELETE FROM ScenePresence WHERE CharacterKey='npc:2' AND SceneId LIKE 'inperson:%';
+
+-- 4) Exact conversation evidence vs NPC perception overlay.
+-- Exact text remains in ConversationMessage. The overlay is what the NPC participant
+-- is allowed to use when it did not fully hear/see that player turn.
+SELECT m.SessionId,m.Sequence,m.Role,m.Speaker,m.MessageText AS ExactMessage,
+       p.ObserverNpcId,p.PerceivedText,p.SourceEventKey
+FROM ConversationMessage m
+LEFT JOIN ConversationMessagePerception p ON p.MessageId=m.Id
+ORDER BY m.Id DESC
+LIMIT 40;

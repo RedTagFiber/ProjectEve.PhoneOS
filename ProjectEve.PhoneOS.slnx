@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="../ProjectEve.Core/ProjectEve.Core/ProjectEve.Core.csproj" />
+  <Project Path="../ProjectEve_Clean/ProjectEve_Clean/ProjectEve.csproj" />
+  <Project Path="ProjectEve.PhoneOS/ProjectEve.PhoneOS.csproj" />
+</Solution>

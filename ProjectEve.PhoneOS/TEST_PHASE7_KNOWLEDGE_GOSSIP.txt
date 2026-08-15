@@ -1,0 +1,83 @@
+-- PROJECT EVE PHASE 7 — KNOWLEDGE / GOSSIP DIAGNOSTICS
+
+-- 1) Most recent personal knowledge claims.
+SELECT
+    Id,
+    HolderNpcId,
+    PlayerId,
+    SubjectKey,
+    ClaimKey,
+    ClaimText,
+    Confidence,
+    SourceType,
+    SourceNpcId,
+    Generation,
+    Status,
+    OriginConversationFactId,
+    OriginPerceptionEvidenceId,
+    OriginClaimId,
+    RootOriginClaimId,
+    LearnedGameTime
+FROM NpcKnowledgeClaim
+ORDER BY Id DESC;
+
+-- 2) Eve only (NpcId 1).
+SELECT
+    Id,SubjectKey,ClaimKey,ClaimText,Confidence,SourceType,Generation,Status
+FROM NpcKnowledgeClaim
+WHERE HolderNpcId=1
+ORDER BY Id DESC;
+
+-- 3) Adam only (NpcId 2).
+SELECT
+    Id,SubjectKey,ClaimKey,ClaimText,Confidence,SourceType,Generation,Status
+FROM NpcKnowledgeClaim
+WHERE HolderNpcId=2
+ORDER BY Id DESC;
+
+-- 4) All telephone-game transfers.
+SELECT
+    Id,
+    FromNpcId,
+    ToNpcId,
+    SourceClaimId,
+    ResultClaimId,
+    ReportedText,
+    Channel,
+    SceneId,
+    Generation,
+    SourceConfidence,
+    ResultConfidence,
+    GameTime
+FROM KnowledgeTransmission
+ORDER BY Id DESC;
+
+-- 5) Find all gossip generations only.
+SELECT
+    Id,HolderNpcId,SourceNpcId,Generation,ClaimText,Confidence,OriginClaimId,RootOriginClaimId
+FROM NpcKnowledgeClaim
+WHERE Generation > 0
+ORDER BY RootOriginClaimId,Generation,Id;
+
+-- 6) Check raw Phase 6 perception evidence that can feed knowledge.
+SELECT
+    Id,ObserverCharacterKey,SourceCharacterKey,EventKind,Quality,
+    PerceivedText,Confidence,GameTime
+FROM ScenePerceptionEvidence
+ORDER BY Id DESC;
+
+-- 7) Find Phase 6 evidence not yet imported into any NPC ledger.
+SELECT e.*
+FROM ScenePerceptionEvidence e
+LEFT JOIN NpcKnowledgeClaim k
+  ON k.OriginPerceptionEvidenceId=e.Id
+WHERE k.Id IS NULL
+ORDER BY e.Id DESC;
+
+-- 8) Conversation facts not yet imported into the personal ledger.
+SELECT f.*
+FROM ConversationFact f
+LEFT JOIN NpcKnowledgeClaim k
+  ON k.OriginConversationFactId=f.Id
+WHERE k.Id IS NULL
+ORDER BY f.Id DESC;

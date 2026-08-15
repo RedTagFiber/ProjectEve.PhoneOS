@@ -1,0 +1,23 @@
+PHASE 16 REGISTRATION ONLY
+ProjectEve.PhoneOS/Program.cs
+
+Keep all Phase 6-15 registrations.
+
+ADD:
+
+builder.Services.AddSingleton<ProjectEve.Core.Phone.INpcInitiatedContactService,
+    ProjectEve.Phone.NpcInitiatedContactService>();
+
+builder.Services.AddSingleton<ProjectEve.PhoneOS.Services.NpcInitiatedPhoneDeliveryService>();
+
+builder.Services.AddHostedService<ProjectEve.PhoneOS.Services.NpcInitiatedContactHostedService>();
+
+Recommended order:
+1. IGameTimeService
+2. INpcKnowledgeService
+3. existing PhoneMessagingService
+4. INpcInitiatedContactService
+5. NpcInitiatedPhoneDeliveryService
+6. NpcInitiatedContactHostedService
+
+DO NOT replace the whole Program.cs.

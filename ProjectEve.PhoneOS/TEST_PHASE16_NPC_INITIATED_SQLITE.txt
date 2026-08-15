@@ -1,0 +1,96 @@
+PHASE 16 MANUAL TEST
+(File is .txt intentionally; do not let Visual Studio parse SQLite as T-SQL.)
+
+BUILD
+1. Clean
+2. Build Core
+3. Build ProjectEve
+4. Build PhoneOS
+5. Rebuild
+
+TEST A — EXPLICIT FOLLOW-UP
+1. Schedule Eve with DueGameTime = current game time + 30 minutes.
+2. Press Next Event or +1 hour.
+3. Clock should stop at the due time with "Phone notification".
+4. Within the normal server refresh, Messages should show Eve's outbound text.
+5. Open the Eve thread.
+6. Reply.
+7. The player's reply should continue the same ConversationSession.
+
+TEST B — EXACT TRANSCRIPT
+Inspect ConversationMessage for the generated session.
+The NPC initiated line must be stored as:
+    Role = npc
+    SpeakerNpcId = Eve's real ID
+There must be NO fake player message before it.
+
+TEST C — CLAIM SAFETY
+1. Pick a claim owned by Lisa.
+2. Schedule Lisa with ClaimId = that claim.
+3. It should generate normally.
+4. Try the same ClaimId with Adam as NpcId.
+5. Expected: scheduling fails because Adam does not own Lisa's claim.
+
+TEST D — UNKNOWN NUMBER
+1. Pick an NPC not in PlayerPhoneContact.
+2. Schedule ForceCommit=true, AllowUnknownNumber=true.
+3. At due time message should arrive.
+4. PlayerPhoneContact should now exist with ContactSource=received_text.
+
+TEST E — BLOCK
+1. Mark a contact IsBlocked=1.
+2. Schedule a ForceCommit contact.
+3. At due time the message must NOT be inserted.
+4. Trigger status should become skipped / blocked.
+
+TEST F — SPONTANEOUS DAY
+1. Have several existing contacts.
+2. Advance into a new game day.
+3. NpcSpontaneousContactDay should get one row for that player/day.
+4. At most 2 spontaneous trigger rows should be created for that day.
+5. Repeated +15 min presses must NOT reroll the day.
+
+TEST G — TRAVEL INTERRUPTION
+1. Start a Phase 15 trip with 30 game minutes duration.
+2. Schedule an initiated NPC text 10 minutes into the trip.
+3. Start travel.
+4. Clock should stop at the contact.
+5. Player remains traveling.
+6. Read the message.
+7. Continue Travel.
+
+TEST H — SAME PAIR IN PERSON
+1. Player is actively in an in-person conversation with Eve.
+2. Eve has a due text trigger.
+3. Due trigger should postpone instead of texting while she is face-to-face.
+4. New trigger event should be about 10 game minutes later.
+
+OPTIONAL SQLITE — PROJECT EVE DB
+
+SELECT Id,PlayerId,NpcId,NpcName,Kind,Motive,DueGameTime,
+       Urgency,Commitment,ContactScore,ClaimId,ConversationPlanId,
+       Status,DecisionCode,RetryCount,GeneratedText,
+       ConversationSessionId,GameEventId,PhoneMessageId
+FROM NpcInitiatedContactTrigger
+ORDER BY Id DESC;
+
+SELECT PlayerId,GameDay,CreatedRealUtc
+FROM NpcSpontaneousContactDay
+ORDER BY GameDay DESC,PlayerId;
+
+SELECT Id,PlayerId,EventType,Title,GameTime,Status,SourceKey
+FROM GameEvent
+WHERE EventType='npc_initiated_contact_due'
+ORDER BY Id DESC;
+
+OPTIONAL SQLITE — PHONE DB
+
+SELECT Id,ThreadId,PlayerId,NpcId,Sender,MessageText,
+       SentGameTime,ConversationSessionId,InitiatedTriggerId
+FROM PhoneMessage
+WHERE InitiatedTriggerId IS NOT NULL
+ORDER BY Id DESC;
+
+SELECT PlayerId,NpcId,DisplayName,ContactSource,IsBlocked,IsMuted
+FROM PlayerPhoneContact
+ORDER BY PlayerId,DisplayName;

@@ -1,0 +1,74 @@
+PHASE 14 MANUAL TEST
+(File is .txt intentionally so Visual Studio does not parse it as SQL Server.)
+
+BUILD
+1. Clean Solution
+2. Build ProjectEve.Core
+3. Build ProjectEve
+4. Build ProjectEve.PhoneOS
+5. Rebuild Solution
+
+TEST A — APP SWITCH DOES NOT MOVE PLAYER
+1. Go to Sinclair Coffee in In Person.
+2. Note PRESENT list.
+3. Open Messages.
+4. Wait 5 seconds.
+5. Open the left info panel.
+6. Location must still be Sinclair Coffee.
+7. Return to In Person.
+8. The same shared scene/session should continue.
+
+TEST B — PHASE 11 DISTANCE SURVIVES HEARTBEAT
+1. Stand 4 ft from Eve.
+2. ACTION: move closer to Eve.
+3. Confirm distance becomes ~2 ft.
+4. Wait at least 15 seconds.
+5. Distance must NOT snap back to the player slot.
+
+TEST C — CONTACT SURVIVES APP SWITCH
+1. Establish valid active contact (for example a mutual hug).
+2. Open Messages.
+3. Return to In Person.
+4. The page switch itself must not break the contact.
+5. Actual travel to another location MUST break the contact.
+
+TEST D — PLAYER ACTIVITY / ATTENTION
+1. At same location, remain in In Person.
+2. Inspect ScenePresence for player:
+       Activity = conversation
+       Attention ≈ .90
+3. Open Messages.
+4. Inspect again:
+       Activity = using_phone
+       Attention ≈ .58
+5. Location / X / Y must remain unchanged.
+
+TEST E — PHYSICAL TRAVEL STILL MOVES PLAYER
+1. Travel from Sinclair Coffee to a different known location.
+2. PlayerWorldPresenceState.LocationId must change.
+3. Old shared scene membership must be removed.
+4. New shared scene membership must exist.
+5. Active Phase 11 contact in the old scene must be broken.
+
+OPTIONAL SQLITE INSPECTION
+
+SELECT PlayerId,PlayerName,LocationId,LocationDisplayName,SceneId,
+       Status,Activity,Attention,XFeet,YFeet,FacingDegrees,
+       HasSpatialSnapshot,ClientAttached,
+       LastClientHeartbeatRealUtc,UpdatedGameTime
+FROM PlayerWorldPresenceState;
+
+SELECT Id,PlayerId,PlayerName,FromLocationId,ToLocationId,
+       FromSceneId,ToSceneId,GameTime,Reason
+FROM PlayerWorldMovementEvent
+ORDER BY Id DESC;
+
+SELECT SceneId,PlayerId,PlayerName,SlotIndex,LastHeartbeatRealUtc
+FROM SharedScenePlayerMembership
+ORDER BY SceneId,SlotIndex;
+
+SELECT SceneId,CharacterKey,PlayerId,DisplayName,
+       XFeet,YFeet,FacingDegrees,Attention,Activity,IsActive
+FROM ScenePresence
+WHERE IsPlayer=1
+ORDER BY SceneId,CharacterKey;

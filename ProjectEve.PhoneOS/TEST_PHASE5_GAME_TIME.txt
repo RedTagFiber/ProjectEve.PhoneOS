@@ -1,0 +1,22 @@
+-- Run against the DB selected by EVE_DB_PATH (or main ProjectEve Data/project_eve.db)
+
+SELECT * FROM GameClockState;
+
+SELECT Id,PlayerId,EventType,Title,GameTime,Status,SourceKey
+FROM GameEvent
+ORDER BY GameTime,Id;
+
+SELECT PlayerId,LocationId,LearnedFrom,FirstKnownGameTime,CanTravelDirectly
+FROM PlayerKnownLocation
+ORDER BY PlayerId,LocationId;
+
+SELECT LocationId,Name,Aliases,LocationType,AddressText
+FROM TravelLocationIndex
+ORDER BY Name;
+
+-- Phone DB may be separate if EVE_PHONE_DB_PATH is configured.
+-- New phone columns:
+-- SELECT Id,PlayerId,NpcId,Sender,MessageText,SentGameTime,
+--        ReplyDueGameTime,SimulationDelayMinutes,ReplyState
+-- FROM PhoneMessage
+-- ORDER BY Id DESC LIMIT 30;

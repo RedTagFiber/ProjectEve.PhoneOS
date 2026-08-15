@@ -1,0 +1,301 @@
+@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using ProjectEve.Core.World
+@using ProjectEve.PhoneOS.Components.Pages
+@using ProjectEve.PhoneOS.Services
+@implements IAsyncDisposable
+@inject PlayerProfileService Players
+@inject IPlayerWorldPresenceService PlayerPresence
+@inject SceneUiStateService SceneUi
+@inject NavigationManager Nav
+
+<div class="eve-app-shell"
+     @onpointerdown="OnPointerDown"
+     @onpointerup="OnPointerUp">
+
+    <aside class="eve-desktop-left" aria-label="Game information">
+        <LeftInfoPanel />
+    </aside>
+
+    <main class="eve-app-main">
+        <div class="eve-mobile-edge eve-mobile-edge-left">
+            <button type="button" aria-label="Open game information" @onclick="OpenLeft">☰</button>
+        </div>
+        <div class="eve-mobile-edge eve-mobile-edge-right">
+            <button type="button" aria-label="Open time and travel tools" @onclick="OpenRight">◷</button>
+        </div>
+
+        <div class="page-transition">
+            @Body
+        </div>
+    </main>
+
+    <aside class="eve-desktop-right" aria-label="Time and travel tools">
+        <RightToolsPanel />
+    </aside>
+
+    <div class="eve-mobile-drawer left @(_leftOpen ? "open" : "")" aria-hidden="@(!_leftOpen)">
+        <button class="eve-drawer-close" type="button" @onclick="CloseDrawers" aria-label="Close">×</button>
+        <LeftInfoPanel />
+    </div>
+
+    <div class="eve-mobile-drawer right @(_rightOpen ? "open" : "")" aria-hidden="@(!_rightOpen)">
+        <button class="eve-drawer-close" type="button" @onclick="CloseDrawers" aria-label="Close">×</button>
+        <RightToolsPanel />
+    </div>
+
+    @if (_leftOpen || _rightOpen)
+    {
+        <button class="eve-drawer-scrim" type="button" @onclick="CloseDrawers" aria-label="Close side panel"></button>
+    }
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    readonly CancellationTokenSource _presenceLifetime = new();
+
+    bool _leftOpen;
+    bool _rightOpen;
+    bool _disposed;
+    bool _playerAttached;
+
+    string _attachedPlayerId = "";
+
+    double? _pointerStartX;
+    double? _pointerStartY;
+
+    Task? _presenceLoop;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+
+        await SyncPlayerPresenceAsync(_presenceLifetime.Token);
+
+        _presenceLoop = PresenceLoopAsync(_presenceLifetime.Token);
+    }
+
+    async Task PresenceLoopAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await SyncPlayerPresenceAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[PlayerWorldPresence layout] " + ex.Message);
+            }
+
+            try
+            {
+                await Task.Delay(1000, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+    }
+
+    async Task SyncPlayerPresenceAsync(CancellationToken cancellationToken)
+    {
+        if (!Players.HasPlayer || Players.Current == null)
+        {
+            if (!_playerAttached)
+                SceneUi.Clear();
+
+            return;
+        }
+
+        var player = Players.Current;
+        string playerId = player.Id;
+        string playerName = !string.IsNullOrWhiteSpace(player.FullName)
+            ? player.FullName
+            : player.DisplayName;
+
+        if (!_playerAttached ||
+            !_attachedPlayerId.Equals(playerId, StringComparison.OrdinalIgnoreCase))
+        {
+            await PlayerPresence.AttachClientAsync(
+                playerId,
+                playerName,
+                cancellationToken);
+
+            _playerAttached = true;
+            _attachedPlayerId = playerId;
+        }
+
+        var (activity, attention) = ActivityForCurrentRoute();
+
+        var state = await PlayerPresence.HeartbeatAsync(
+            playerId,
+            activity,
+            attention,
+            cancellationToken);
+
+        if (state == null)
+        {
+            SceneUi.Clear();
+            return;
+        }
+
+        if (state.Status.Equals("traveling", StringComparison.OrdinalIgnoreCase))
+        {
+            string destination = string.IsNullOrWhiteSpace(state.DestinationDisplayName)
+                ? state.DestinationLocationId
+                : state.DestinationDisplayName;
+
+            SceneUi.SetScene(
+                "",
+                $"Traveling to {destination}",
+                Array.Empty<PerceivedPresenceRow>());
+
+            return;
+        }
+
+        if (!state.HasLocation)
+        {
+            SceneUi.Clear();
+            return;
+        }
+
+        var visible = await PlayerPresence.GetPerceivedPresenceAsync(
+            playerId,
+            cancellationToken);
+
+        SceneUi.SetScene(
+            state.LocationId,
+            state.LocationDisplayName,
+            visible.Select(x => new PerceivedPresenceRow
+            {
+                CharacterId = x.NpcId,
+                DisplayName = x.DisplayName,
+                DistanceFeet = x.DistanceFeet,
+                IsPlayer = x.IsPlayer,
+                IsLocalPlayer = x.CharacterKey.Equals(
+                    state.CharacterKey,
+                    StringComparison.OrdinalIgnoreCase),
+                IsKnownToPlayer = true,
+                Note = x.Note
+            }));
+    }
+
+    (string Activity, double Attention) ActivityForCurrentRoute()
+    {
+        var relative = Nav.ToBaseRelativePath(Nav.Uri)
+            .Split('?', '#')[0]
+            .Trim('/')
+            .ToLowerInvariant();
+
+        if (relative == "in-person")
+            return ("conversation", 0.90);
+
+        if (relative.StartsWith("messages") ||
+            relative.StartsWith("group-chat") ||
+            relative.StartsWith("calls") ||
+            relative.StartsWith("contacts"))
+            return ("using_phone", 0.58);
+
+        return ("idle", 0.72);
+    }
+
+    void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (_disposed)
+            return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await SyncPlayerPresenceAsync(_presenceLifetime.Token);
+            }
+            catch { }
+        });
+    }
+
+    void OpenLeft()
+    {
+        _rightOpen = false;
+        _leftOpen = true;
+    }
+
+    void OpenRight()
+    {
+        _leftOpen = false;
+        _rightOpen = true;
+    }
+
+    void CloseDrawers()
+    {
+        _leftOpen = false;
+        _rightOpen = false;
+    }
+
+    void OnPointerDown(PointerEventArgs e)
+    {
+        if (e.PointerType == "mouse")
+            return;
+
+        _pointerStartX = e.ClientX;
+        _pointerStartY = e.ClientY;
+    }
+
+    void OnPointerUp(PointerEventArgs e)
+    {
+        if (!_pointerStartX.HasValue || !_pointerStartY.HasValue)
+            return;
+
+        var dx = e.ClientX - _pointerStartX.Value;
+        var dy = e.ClientY - _pointerStartY.Value;
+        _pointerStartX = null;
+        _pointerStartY = null;
+
+        if (Math.Abs(dx) < 70 || Math.Abs(dx) < Math.Abs(dy) * 1.25)
+            return;
+
+        if (dx > 0)
+            OpenLeft();
+        else
+            OpenRight();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        Nav.LocationChanged -= OnLocationChanged;
+        _presenceLifetime.Cancel();
+
+        if (_presenceLoop != null)
+        {
+            try { await _presenceLoop; }
+            catch { }
+        }
+
+        if (_playerAttached && !string.IsNullOrWhiteSpace(_attachedPlayerId))
+        {
+            try
+            {
+                await PlayerPresence.DetachClientAsync(_attachedPlayerId);
+            }
+            catch { }
+        }
+
+        _presenceLifetime.Dispose();
+    }
+}

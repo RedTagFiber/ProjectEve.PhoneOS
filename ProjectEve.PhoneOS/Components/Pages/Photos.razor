@@ -1,0 +1,318 @@
+﻿@page "/photos"
+
+<PageTitle>Photos</PageTitle>
+
+<div class="phone-stage">
+    <div class="phone-bezel">
+        <div class="phone-notch"></div>
+
+        <div class="phone-screen photos-screen">
+            <div class="status-bar">
+                <span>@DateTime.Now.ToString("h:mm")</span>
+                <span>5G · 84%</span>
+            </div>
+
+            @if (_viewer == null)
+            {
+                <div class="ph-top">
+                    <a class="ph-back" href="/">‹</a>
+                    <div class="ph-brand">Photos</div>
+                    <button type="button" class="ph-icon-btn" title="Select">⊡</button>
+                </div>
+
+                <div class="ph-tabs">
+                    @foreach (var tab in _tabs)
+                    {
+                        <button type="button"
+                                class="ph-tab @(_tab == tab ? "active" : null)"
+                                @onclick="() => SetTab(tab)">
+                            @tab
+                        </button>
+                    }
+                </div>
+
+                <div class="ph-grid">
+                    @foreach (var p in _visible)
+                    {
+                        <button type="button" class="ph-cell" @onclick="() => Open(p)">
+                            <div class="ph-thumb" style="background-image: url('@p.Url');"></div>
+                        </button>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="ph-viewer">
+                    <div class="ph-viewer-top">
+                        <button type="button" class="ph-back btn" @onclick="Close">‹</button>
+                        <div class="ph-viewer-meta">
+                            <div class="ph-viewer-title">@_viewer.Title</div>
+                            <div class="ph-viewer-sub">@_viewer.Album · @_viewer.When</div>
+                        </div>
+                        <button type="button" class="ph-icon-btn" title="Share">➤</button>
+                    </div>
+
+                    <div class="ph-viewer-img" style="background-image: url('@_viewer.Url');"></div>
+
+                    <div class="ph-viewer-actions">
+                        <button type="button">♡</button>
+                        <button type="button">💬</button>
+                        <button type="button" @onclick="SendToMessages">Send</button>
+                    </div>
+                </div>
+            }
+
+            <div class="home-indicator"></div>
+        </div>
+    </div>
+</div>
+
+@code {
+    string _tab = "All";
+    readonly string[] _tabs = { "All", "Scenes", "Eve", "Recents" };
+
+    PhotoItem? _viewer;
+    List<PhotoItem> _visible = new();
+
+    readonly List<PhotoItem> _all = new()
+    {
+        new("Coffee Shop", "Scenes", "Today", "/images/scenes/coffee-shop.png"),
+        new("Eve's Apartment", "Scenes", "Today", "/images/scenes/eve-apartment.png"),
+        new("Ryan's House", "Scenes", "Yesterday", "/images/scenes/ryans-house.png"),
+        new("Eve · Hoodie", "Eve", "Today", "/images/npcs/eve/portraits/eve_hoodie.jpg"),
+        new("Eve · Night", "Eve", "Yesterday", "/images/npcs/eve/portraits/eve_nightlife.jpg"),
+        new("Eve · Sundress", "Eve", "Last week", "/images/npcs/eve/portraits/eve_sundress.jpg"),
+        new("Eve · Portrait", "Eve", "Last week", "/images/npcs/eve/portraits/Eve_SinClaire_Portait.png"),
+    };
+
+    protected override void OnInitialized() => SetTab("All");
+
+    void SetTab(string tab)
+    {
+        _tab = tab;
+        _visible = tab switch
+        {
+            "Scenes" => _all.Where(p => p.Album == "Scenes").ToList(),
+            "Eve" => _all.Where(p => p.Album == "Eve").ToList(),
+            "Recents" => _all.Take(4).ToList(),
+            _ => _all.ToList()
+        };
+    }
+
+    void Open(PhotoItem p) => _viewer = p;
+    void Close() => _viewer = null;
+
+    void SendToMessages()
+    {
+        // later: queue image into Messages / Eve chat
+        Close();
+    }
+
+    sealed record PhotoItem(string Title, string Album, string When, string Url);
+}
+
+<style>
+    .phone-stage {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 1.25rem;
+        background: radial-gradient(ellipse at 50% 0%, #1a1a28 0%, #07070a 55%);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    }
+
+    .phone-bezel {
+        width: min(390px, 100%);
+        border-radius: 42px;
+        padding: 10px;
+        background: linear-gradient(160deg, #3a3a40 0%, #1c1c1e 40%, #0e0e10 100%);
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 25px 50px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.12);
+        position: relative;
+    }
+
+    .phone-notch {
+        position: absolute;
+        top: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 110px;
+        height: 28px;
+        background: #000;
+        border-radius: 20px;
+        z-index: 5;
+    }
+
+    .photos-screen {
+        border-radius: 34px;
+        overflow: hidden;
+        min-height: 720px;
+        height: min(780px, 92vh);
+        background: #000;
+        color: #f5f5f7;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .status-bar {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.85rem 1.35rem 0.2rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        opacity: 0.92;
+    }
+
+    .ph-top {
+        display: flex;
+        align-items: center;
+        padding: 0.25rem 0.85rem 0.45rem;
+    }
+
+    .ph-back {
+        color: #f5f5f7;
+        text-decoration: none;
+        font-size: 1.5rem;
+        width: 2rem;
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        text-align: left;
+    }
+
+        .ph-back.btn {
+            color: #f5f5f7;
+        }
+
+    .ph-brand {
+        flex: 1;
+        text-align: center;
+        font-weight: 800;
+        font-size: 1.1rem;
+        background: linear-gradient(120deg, #ffb340, #ff453a);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+
+    .ph-icon-btn {
+        width: 2rem;
+        border: none;
+        background: transparent;
+        color: #f5f5f7;
+        font-size: 1.1rem;
+        cursor: pointer;
+    }
+
+    .ph-tabs {
+        display: flex;
+        gap: 0.35rem;
+        padding: 0.25rem 0.85rem 0.65rem;
+        overflow-x: auto;
+    }
+
+    .ph-tab {
+        border: 1px solid rgba(255,255,255,0.1);
+        background: rgba(255,255,255,0.04);
+        color: #f5f5f7;
+        border-radius: 999px;
+        padding: 0.3rem 0.75rem;
+        font-size: 0.75rem;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+        .ph-tab.active {
+            background: #fff;
+            color: #000;
+            border-color: transparent;
+            font-weight: 700;
+        }
+
+    .ph-grid {
+        flex: 1;
+        overflow-y: auto;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2px;
+        padding: 0 2px;
+        align-content: start;
+    }
+
+    .ph-cell {
+        border: none;
+        padding: 0;
+        background: #1c1c1e;
+        cursor: pointer;
+        aspect-ratio: 1;
+    }
+
+    .ph-thumb {
+        width: 100%;
+        height: 100%;
+        background-size: cover;
+        background-position: center;
+    }
+
+    .ph-viewer {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .ph-viewer-top {
+        display: flex;
+        align-items: center;
+        padding: 0.35rem 0.75rem 0.5rem;
+    }
+
+    .ph-viewer-meta {
+        flex: 1;
+        text-align: center;
+        min-width: 0;
+    }
+
+    .ph-viewer-title {
+        font-weight: 700;
+        font-size: 0.9rem;
+    }
+
+    .ph-viewer-sub {
+        font-size: 0.68rem;
+        opacity: 0.5;
+    }
+
+    .ph-viewer-img {
+        flex: 1;
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        background-color: #000;
+        margin: 0.25rem 0;
+    }
+
+    .ph-viewer-actions {
+        display: flex;
+        justify-content: space-around;
+        padding: 0.65rem 1rem 0.25rem;
+    }
+
+        .ph-viewer-actions button {
+            border: none;
+            background: rgba(255,255,255,0.08);
+            color: #f5f5f7;
+            border-radius: 999px;
+            padding: 0.45rem 1rem;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+    .home-indicator {
+        width: 120px;
+        height: 4px;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.35);
+        margin: 0.5rem auto 0.5rem;
+    }
+</style>

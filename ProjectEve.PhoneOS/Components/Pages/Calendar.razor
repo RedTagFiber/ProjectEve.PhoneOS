@@ -1,0 +1,403 @@
+﻿@page "/calendar"
+
+<PageTitle>Calendar</PageTitle>
+
+<div class="phone-stage">
+    <div class="phone-bezel">
+        <div class="phone-notch"></div>
+
+        <div class="phone-screen cal-screen">
+            <div class="status-bar">
+                <span>@DateTime.Now.ToString("h:mm")</span>
+                <span>5G · 84%</span>
+            </div>
+
+            <div class="cal-top">
+                <a class="cal-back" href="/">‹</a>
+                <div class="cal-brand">@_monthLabel</div>
+                <button type="button" class="cal-icon-btn" title="Add">＋</button>
+            </div>
+
+            @* Week strip *@
+            <div class="cal-week">
+                @foreach (var d in _days)
+                {
+                    <button type="button"
+                            class="cal-day @(d.Selected ? "selected" : null) @(d.HasEvent ? "dot" : null)"
+                            @onclick="() => SelectDay(d)">
+                        <span class="dow">@d.Dow</span>
+                        <span class="num">@d.Day</span>
+                    </button>
+                }
+            </div>
+
+            <div class="cal-today-label">@_selectedLabel</div>
+
+            @* Events *@
+            <div class="cal-list">
+                @if (_visible.Count == 0)
+                {
+                    <div class="cal-empty">Nothing scheduled. Ordinary day.</div>
+                }
+                else
+                {
+                    @foreach (var e in _visible)
+                    {
+                        <article class="cal-card @e.Kind">
+                            <div class="cal-card-time">
+                                <div class="t-start">@e.Start</div>
+                                <div class="t-end">@e.End</div>
+                            </div>
+                            <div class="cal-card-body">
+                                <div class="cal-card-title">@e.Title</div>
+                                <div class="cal-card-place">@e.Place</div>
+                                <div class="cal-card-meta">
+                                    <span class="pill">@e.KindLabel</span>
+                                    @if (!string.IsNullOrWhiteSpace(e.Cost))
+                                    {
+                                        <span class="cost">@e.Cost</span>
+                                    }
+                                </div>
+                            </div>
+                        </article>
+                    }
+                }
+            </div>
+
+            <div class="home-indicator"></div>
+        </div>
+    </div>
+</div>
+
+@code {
+    string _monthLabel = DateTime.Now.ToString("MMMM yyyy");
+    string _selectedLabel = "Today";
+    DateTime _selected = DateTime.Today;
+
+    readonly List<DayCell> _days = new();
+    readonly List<CalEvent> _all = new();
+    List<CalEvent> _visible = new();
+
+    protected override void OnInitialized()
+    {
+        BuildWeek();
+        SeedEvents();
+        FilterEvents();
+    }
+
+    void BuildWeek()
+    {
+        _days.Clear();
+        var start = DateTime.Today.AddDays(-(int)DateTime.Today.DayOfWeek + (int)DayOfWeek.Sunday);
+        // Show Sun–Sat around today
+        start = DateTime.Today.AddDays(-3);
+        for (int i = 0; i < 7; i++)
+        {
+            var d = start.AddDays(i);
+            _days.Add(new DayCell(
+                d,
+                d.ToString("ddd")[..2],
+                d.Day,
+                d.Date == _selected.Date,
+                false));
+        }
+    }
+
+    void SeedEvents()
+    {
+        var t = DateTime.Today;
+        _all.Add(new CalEvent(t, "9:00 AM", "5:00 PM", "Work · Coffee Shop", "Downtown Bellefontaine", "work", "Work", null));
+        _all.Add(new CalEvent(t, "7:30 PM", "10:00 PM", "In Person · Eve", "Coffee Shop / Apartment", "social", "Social", null));
+        _all.Add(new CalEvent(t.AddDays(1), "1:00 PM", "4:00 PM", "County Fair", "Logan County Fairgrounds", "event", "Event", "$12"));
+        _all.Add(new CalEvent(t.AddDays(2), "7:00 PM", "10:30 PM", "OSU Game Watch", "Ryan's House", "sports", "Sports", null));
+        _all.Add(new CalEvent(t.AddDays(3), "6:00 PM", "11:00 PM", "Everwild / Live Music", "Columbus area", "event", "Event", "$45–$85"));
+        _all.Add(new CalEvent(t.AddDays(5), "All day", "", "Anniversary window", "—", "special", "Special", null));
+
+        foreach (var day in _days)
+            day.HasEvent = _all.Any(e => e.Date.Date == day.Date.Date);
+    }
+
+    void SelectDay(DayCell cell)
+    {
+        _selected = cell.Date;
+        foreach (var d in _days)
+            d.Selected = d.Date.Date == _selected.Date;
+
+        _selectedLabel = _selected.Date == DateTime.Today
+            ? "Today"
+            : _selected.ToString("dddd, MMM d");
+
+        FilterEvents();
+    }
+
+    void FilterEvents()
+    {
+        _visible = _all.Where(e => e.Date.Date == _selected.Date).ToList();
+    }
+
+    sealed class DayCell
+    {
+        public DateTime Date { get; }
+        public string Dow { get; }
+        public int Day { get; }
+        public bool Selected { get; set; }
+        public bool HasEvent { get; set; }
+
+        public DayCell(DateTime date, string dow, int day, bool selected, bool hasEvent)
+        {
+            Date = date; Dow = dow; Day = day; Selected = selected; HasEvent = hasEvent;
+        }
+    }
+
+    sealed record CalEvent(
+        DateTime Date,
+        string Start,
+        string End,
+        string Title,
+        string Place,
+        string Kind,
+        string KindLabel,
+        string? Cost);
+}
+
+<style>
+    .phone-stage {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 1.25rem;
+        background: radial-gradient(ellipse at 50% 0%, #1a1a28 0%, #07070a 55%);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    }
+
+    .phone-bezel {
+        width: min(390px, 100%);
+        border-radius: 42px;
+        padding: 10px;
+        background: linear-gradient(160deg, #3a3a40 0%, #1c1c1e 40%, #0e0e10 100%);
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 25px 50px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.12);
+        position: relative;
+    }
+
+    .phone-notch {
+        position: absolute;
+        top: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 110px;
+        height: 28px;
+        background: #000;
+        border-radius: 20px;
+        z-index: 5;
+    }
+
+    .cal-screen {
+        border-radius: 34px;
+        overflow: hidden;
+        min-height: 720px;
+        height: min(780px, 92vh);
+        background: #0a0a0c;
+        color: #f5f5f7;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .status-bar {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.85rem 1.35rem 0.2rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        opacity: 0.92;
+    }
+
+    .cal-top {
+        display: flex;
+        align-items: center;
+        padding: 0.25rem 0.85rem 0.55rem;
+    }
+
+    .cal-back {
+        color: #f5f5f7;
+        text-decoration: none;
+        font-size: 1.5rem;
+        width: 2rem;
+    }
+
+    .cal-brand {
+        flex: 1;
+        text-align: center;
+        font-weight: 800;
+        font-size: 1.05rem;
+        background: linear-gradient(120deg, #ff6b5a, #ff9f8a);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+
+    .cal-icon-btn {
+        width: 2rem;
+        border: none;
+        background: transparent;
+        color: #f5f5f7;
+        font-size: 1.25rem;
+        cursor: pointer;
+    }
+
+    .cal-week {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.35rem 0.65rem 0.75rem;
+        gap: 0.25rem;
+    }
+
+    .cal-day {
+        flex: 1;
+        border: none;
+        background: transparent;
+        color: #f5f5f7;
+        border-radius: 14px;
+        padding: 0.45rem 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+        cursor: pointer;
+        position: relative;
+    }
+
+        .cal-day .dow {
+            font-size: 0.62rem;
+            opacity: 0.5;
+            text-transform: uppercase;
+        }
+
+        .cal-day .num {
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        .cal-day.selected {
+            background: #ff453a;
+            box-shadow: 0 6px 16px rgba(255,69,58,0.35);
+        }
+
+        .cal-day.dot::after {
+            content: "";
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: #0a84ff;
+            position: absolute;
+            bottom: 5px;
+        }
+
+        .cal-day.selected.dot::after {
+            background: #fff;
+        }
+
+    .cal-today-label {
+        padding: 0 1rem 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        opacity: 0.55;
+    }
+
+    .cal-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0 0.75rem 0.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+    }
+
+    .cal-empty {
+        text-align: center;
+        padding: 2rem 1rem;
+        opacity: 0.45;
+        font-size: 0.9rem;
+    }
+
+    .cal-card {
+        display: flex;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        border-radius: 16px;
+        background: #141416;
+        border: 1px solid rgba(255,255,255,0.06);
+        border-left: 3px solid #0a84ff;
+    }
+
+        .cal-card.work {
+            border-left-color: #64d2ff;
+        }
+
+        .cal-card.social {
+            border-left-color: #30d158;
+        }
+
+        .cal-card.event {
+            border-left-color: #ff9f0a;
+        }
+
+        .cal-card.sports {
+            border-left-color: #ff453a;
+        }
+
+        .cal-card.special {
+            border-left-color: #bf5af2;
+        }
+
+    .cal-card-time {
+        min-width: 58px;
+        font-size: 0.68rem;
+        opacity: 0.65;
+    }
+
+    .t-start {
+        font-weight: 700;
+        color: #f5f5f7;
+        opacity: 1;
+        font-size: 0.75rem;
+    }
+
+    .cal-card-title {
+        font-weight: 700;
+        font-size: 0.9rem;
+    }
+
+    .cal-card-place {
+        font-size: 0.75rem;
+        opacity: 0.55;
+        margin-top: 0.15rem;
+    }
+
+    .cal-card-meta {
+        display: flex;
+        gap: 0.4rem;
+        align-items: center;
+        margin-top: 0.4rem;
+    }
+
+    .pill {
+        font-size: 0.62rem;
+        font-weight: 600;
+        padding: 0.12rem 0.45rem;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.08);
+    }
+
+    .cost {
+        font-size: 0.72rem;
+        opacity: 0.7;
+    }
+
+    .home-indicator {
+        width: 120px;
+        height: 4px;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.35);
+        margin: 0.45rem auto 0.5rem;
+    }
+</style>

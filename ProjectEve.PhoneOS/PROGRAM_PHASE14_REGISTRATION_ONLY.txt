@@ -1,0 +1,14 @@
+PHASE 14 REGISTRATION ONLY
+ProjectEve.PhoneOS/Program.cs
+
+Keep all Phase 6-13 registrations.
+
+ADD:
+
+builder.Services.AddSingleton<ProjectEve.Core.World.IPlayerWorldPresenceService,
+    ProjectEve.World.PlayerWorldPresenceService>();
+
+Do NOT register PlayerWorldPresenceService as scoped.
+World location truth must live on the server, not inside one Razor page/circuit.
+
+No other Program.cs replacement is required.

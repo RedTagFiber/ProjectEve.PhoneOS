@@ -1,0 +1,46 @@
+PHASE 10 INSTALL ORDER — SHARED IN-PERSON + TWO-PLAYER SAFE PRESENCE
+
+Prerequisites:
+- Phase 6 scene perception installed
+- Phase 7 knowledge installed
+- Phase 8 social decision installed
+- Phase 9 group scene orchestrator installed
+- Your approved Phase 5 app.css stays in place
+
+1) ProjectEve.Core
+ADD:
+  ProjectEve.Core/Scene/ISharedScenePresenceCoordinator.cs
+
+REPLACE Phase 9 contract with Phase 10 version:
+  ProjectEve.Core/Scene/IGroupSceneConversationOrchestrator.cs
+
+Build ProjectEve.Core.
+
+2) ProjectEve main project
+ADD:
+  Scene/SharedScenePresenceCoordinator.cs
+
+REPLACE Phase 9 implementation with Phase 10 version:
+  Scene/GroupSceneConversationOrchestrator.cs
+
+Build ProjectEve.
+
+3) ProjectEve.PhoneOS
+REPLACE:
+  Components/Pages/InPerson.razor
+
+DO NOT replace app.css.
+
+Add the Program.cs DI lines from:
+  PROGRAM_PHASE10_REGISTRATION_ONLY.txt
+
+4) Clean Solution
+5) Build ProjectEve.Core
+6) Build ProjectEve
+7) Build ProjectEve.PhoneOS
+8) Rebuild Solution
+
+IMPORTANT:
+- Do not add another ISharedScenePresenceCoordinator file under the main ProjectEve project.
+- Core owns the contract; ProjectEve owns the implementation.
+- InPerson no longer removes Eve when one player leaves a shared scene.

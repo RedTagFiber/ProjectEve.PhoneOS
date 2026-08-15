@@ -1,0 +1,15 @@
+PHASE 12 REGISTRATION ONLY
+ProjectEve.PhoneOS/Program.cs
+
+Keep all Phase 6-11 registrations.
+
+Add:
+
+builder.Services.AddSingleton<ProjectEve.Core.World.IWorldOccupancyService,
+    ProjectEve.World.WorldOccupancyService>();
+
+builder.Services.AddHostedService<ProjectEve.PhoneOS.Services.WorldOccupancyHostedService>();
+
+IMPORTANT:
+- Register IWorldOccupancyService AFTER the Phase 10/11 shared scene services.
+- Do not replace the whole Program.cs if your local copy has newer edits.

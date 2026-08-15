@@ -1,0 +1,80 @@
+PHASE 15 MANUAL TEST
+(File is .txt intentionally so Visual Studio does not parse it as SQL Server.)
+
+BEFORE TESTING
+Register at least one REAL authored route using ROUTE_SETUP_EXAMPLE.txt.
+
+TEST A — NO ROUTE, NO MADE-UP TIME
+1. Search a known destination.
+2. Choose a method with no registered route.
+3. Click destination.
+4. Expected:
+   "No <method> route/time is registered..."
+5. Game time must not move.
+6. Player location must not change.
+
+TEST B — REAL TRAVEL
+1. Register a route.
+2. Player begins at origin.
+3. Search destination.
+4. Select matching method.
+5. Click destination.
+6. Player must leave origin scene immediately.
+7. PlayerWorldPresenceState.Status = traveling.
+8. Game time advances.
+9. At arrival, player enters destination scene.
+
+TEST C — URL DOES NOT TELEPORT
+1. Player physically at origin.
+2. Manually open:
+   /in-person?location=<different known place>
+3. PlayerWorldPresenceState must remain at origin.
+4. Page must not physically move player.
+
+TEST D — INTERRUPTED TRAVEL
+1. Register 30 game-minute trip.
+2. Queue a player event 10 minutes into the trip.
+3. Start travel.
+4. Fast-forward stops at the event.
+5. Player remains Status=traveling.
+6. Right panel shows Continue Travel.
+7. Continue.
+8. Arrival occurs at original expected game time.
+
+TEST E — PHASE 11 CONTACT
+1. Establish active physical contact in origin scene.
+2. Start travel.
+3. Contact must break immediately when player departs.
+
+TEST F — MULTI-LEG
+Register:
+A -> B = authored time
+B -> C = authored time
+No direct A -> C route.
+
+Travel A -> C.
+Expected:
+planner uses A -> B -> C
+and sums only the registered durations.
+
+OPTIONAL SQLITE
+
+SELECT Id,FromLocationId,ToLocationId,Method,Minutes,Source,IsActive
+FROM WorldTravelRoute
+ORDER BY FromLocationId,ToLocationId,Method;
+
+SELECT Id,PlayerId,OriginLocationId,DestinationLocationId,Method,
+       PlannedMinutes,DepartGameTime,ExpectedArrivalGameTime,
+       ActualArrivalGameTime,Status,ArrivalEventId,LastInterruptTitle
+FROM PlayerTravelJourney
+ORDER BY Id DESC;
+
+SELECT PlayerId,Status,LocationId,SceneId,
+       OriginLocationId,DestinationLocationId,TravelMethod,
+       TravelDepartGameTime,ExpectedArrivalGameTime,ActiveTravelId
+FROM PlayerWorldPresenceState;
+
+SELECT Id,PlayerId,EventType,Title,GameTime,Status,SourceKey
+FROM GameEvent
+WHERE EventType='player_travel_arrival'
+ORDER BY Id DESC;

@@ -1,0 +1,83 @@
+@using ProjectEve.PhoneOS.Services
+@using ProjectEve.Core.Time
+@inject PlayerProfileService Players
+@inject SceneUiStateService Scene
+@inject IGameTimeService Clock
+@implements IDisposable
+
+<div class="eve-panel eve-left-panel">
+    <div class="eve-panel-brand">PROJECT EVE</div>
+
+    <nav class="eve-panel-nav" aria-label="Project Eve navigation">
+        <a href="/">Home</a>
+        <a href="/messages">Messages</a>
+        <a href="/group">Groups</a>
+        <a href="/calendar">Calendar</a>
+        <a href="/in-person">In Person</a>
+        <a href="/photos">Photos</a>
+        <a href="/gram">Gram</a>
+        <a href="/music">Music</a>
+    </nav>
+
+    <section class="eve-panel-section">
+        <div class="eve-panel-kicker">PLAYER</div>
+        <div class="eve-panel-primary">@PlayerName</div>
+        @if (Players.Current is not null)
+        {
+            <div class="eve-panel-muted">@Players.Current.HomeTown</div>
+        }
+    </section>
+
+    <section class="eve-panel-section">
+        <div class="eve-panel-kicker">LOCATION</div>
+        <div class="eve-panel-primary">@Scene.LocationName</div>
+        <div class="eve-panel-muted">@Clock.Now.ToString("ddd · h:mm tt") game time</div>
+    </section>
+
+    <section class="eve-panel-section eve-presence-section">
+        <div class="eve-panel-kicker">PRESENT</div>
+        @if (Scene.VisiblePeople.Count == 0)
+        {
+            <div class="eve-panel-muted">No one currently perceived.</div>
+        }
+        else
+        {
+            @foreach (var person in Scene.VisiblePeople)
+            {
+                <div class="eve-presence-row">
+                    <div>
+                        <div class="eve-presence-name">@person.DisplayName</div>
+                        @if (!string.IsNullOrWhiteSpace(person.Note))
+                        {
+                            <div class="eve-panel-muted">@person.Note</div>
+                        }
+                    </div>
+                    <div class="eve-distance">@(person.IsPlayer ? "You" : $"{person.DistanceFeet:0.#} ft")</div>
+                </div>
+            }
+        }
+    </section>
+
+    <div class="eve-panel-footnote">
+        Only people your character currently perceives belong here. Hidden NPCs stay hidden.
+    </div>
+</div>
+
+@code {
+    string PlayerName => Players.Current?.DisplayName ?? "Player";
+
+    protected override void OnInitialized()
+    {
+        Scene.Changed += HandleChanged;
+        Clock.Changed += HandleClockChanged;
+    }
+
+    void HandleChanged() => _ = InvokeAsync(StateHasChanged);
+    void HandleClockChanged(GameTimeSnapshot snapshot) => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Scene.Changed -= HandleChanged;
+        Clock.Changed -= HandleClockChanged;
+    }
+}

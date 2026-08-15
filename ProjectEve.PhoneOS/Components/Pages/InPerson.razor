@@ -1,0 +1,927 @@
+@page "/in-person"
+@using Microsoft.AspNetCore.Components
+@using ProjectEve.Core.Chat
+@using ProjectEve.Core.Scene
+@using ProjectEve.Core.Time
+@using ProjectEve.Core.World
+@using ProjectEve.PhoneOS.Services
+@implements IAsyncDisposable
+@inject IGameTimeService Clock
+@inject IKnownLocationService KnownLocations
+@inject IWorldOccupancyService Occupancy
+@inject IPlayerWorldPresenceService PlayerPresence
+@inject IGroupSceneConversationOrchestrator GroupScenes
+@inject SceneUiStateService SceneUi
+@inject PlayerProfileService Players
+@inject NavigationManager Nav
+@inject TtsBakeService Tts
+@rendermode InteractiveServer
+
+<PageTitle>In Person</PageTitle>
+
+<div class="scene-v3" style="@SceneBackgroundStyle">
+    <header class="scene-topbar">
+        <div>
+            <div class="scene-location">@_location.Name</div>
+            <div class="scene-meta">@Clock.Now.ToString("ddd h:mm tt") · @_timeLabel · @_location.Weather</div>
+        </div>
+
+        <div class="scene-top-actions">
+            @if (_chatBusy)
+            {
+                <span class="scene-thinking">Thinking…</span>
+            }
+            @if (_ttsBusy)
+            {
+                <span class="scene-thinking">Voice…</span>
+            }
+            <button type="button" class="scene-voice @(_voiceOn ? "on" : "")" @onclick="ToggleVoice">
+                @(_voiceOn ? "Voice On" : "Voice Off")
+            </button>
+            <a href="/messages">Messages</a>
+        </div>
+    </header>
+
+    <section class="scene-scroll">
+        <div class="scene-stream">
+            @foreach (var entry in _entries.OrderBy(x => x.DisplayOrder))
+            {
+                <article class="scene-entry @EntryClass(entry.Kind)" style="@EntryStyle(entry)">
+                    @if (entry.Kind != SceneEntryKind.Scene && entry.Kind != SceneEntryKind.SceneUpdate)
+                    {
+                        <div class="scene-entry-meta">
+                            <span>@entry.ActorName</span>
+                            <span>· @KindLabel(entry.Kind)</span>
+                            @if (!string.IsNullOrWhiteSpace(entry.PerceptionQuality) &&
+                                 !entry.PerceptionQuality.Equals("clear", StringComparison.OrdinalIgnoreCase) &&
+                                 !entry.PerceptionQuality.Equals("exact-produced", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <span>· @entry.PerceptionQuality</span>
+                            }
+                            <time>@entry.GameTime.ToString("h:mm tt")</time>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="scene-entry-meta scene-world-meta">
+                            <span>@(entry.Kind == SceneEntryKind.Scene ? "SCENE" : "SCENE UPDATE")</span>
+                            <time>@entry.GameTime.ToString("h:mm tt")</time>
+                        </div>
+                    }
+
+                    <div class="scene-entry-text">@entry.Text</div>
+                </article>
+            }
+        </div>
+    </section>
+
+    <footer class="scene-composer-v3">
+        <div class="scene-input-row action-row">
+            <label for="scene-action">ACTION</label>
+            <textarea id="scene-action"
+                      value="@_actionDraft"
+                      @oninput="e => _actionDraft = e.Value?.ToString() ?? string.Empty"
+                      placeholder="What do you do?"
+></textarea>
+        </div>
+
+        <div class="scene-input-row say-row">
+            <label for="scene-say">SAY</label>
+            <input id="scene-say"
+                   value="@_sayDraft"
+                   @oninput="e => _sayDraft = e.Value?.ToString() ?? string.Empty"
+                   @onkeydown="OnSayKey"
+                   placeholder="What do you say?"
+                   spellcheck="true"
+                   autocomplete="on" />
+            <button type="button" @onclick="Send" disabled="@_chatBusy">Send</button>
+        </div>
+    </footer>
+
+    @if (!string.IsNullOrWhiteSpace(_lastAudioUrl))
+    {
+        <audio autoplay src="@_lastAudioUrl" @key="_lastAudioUrl"></audio>
+    }
+</div>
+
+@code {
+    // Eve is no longer spawned by the page in Phase 12.
+    // This ID remains only so the optional Eve TTS voice can identify her
+    // speech among multi-NPC group-scene responses.
+    const int EveNpcId = 1;
+    const string VoiceDir = @"D:\ProjectEve\EveData\voice";
+    const int TtsTimeoutMs = 120_000;
+
+    [SupplyParameterFromQuery(Name = "location")]
+    public string? RequestedLocationId { get; set; }
+
+    readonly List<LocationPack> _locations = new()
+    {
+        new("coffee-shop", "Sinclair Coffee", "/images/scenes/coffee-shop.png",
+            "The shop is mostly empty. The espresso machine ticks as it cools down. Warm lights reflect off the wet sidewalk outside.",
+            "Cool night air", "coffee shop|sinclair coffee|cafe"),
+        new("eve-apartment", "Eve's Apartment", "/images/scenes/eve-apartment.png",
+            "Soft lamp light fills the apartment while the city hum sits beyond the window.",
+            "Quiet indoor", "eve apartment|eve's place"),
+        new("ryans-house", "Ryan's House", "/images/scenes/ryans-house.png",
+            "The house has settled into a familiar quiet, broken mostly by the low glow of the room around you.",
+            "Still air", "ryan house|home")
+    };
+
+    readonly List<SceneEntry> _entries = new();
+    readonly HashSet<long> _seenServerEntries = new();
+    readonly CancellationTokenSource _lifetime = new();
+
+    LocationPack _location = null!;
+    bool _initialized;
+    bool _disposed;
+    bool _voiceOn;
+    bool _chatBusy;
+    bool _ttsBusy;
+    bool _sceneJoined;
+
+    string? _lastAudioUrl;
+    string _actionDraft = "";
+    string _sayDraft = "";
+    string _playerId = "legacy-player";
+    string _playerName = "Player";
+    string _playerCharacterKey = "player:legacy-player";
+    string _sceneId = "";
+    string _timeLabel = "Night";
+
+    long _lastServerSequence;
+    long _localDisplayOrder;
+    int _presenceTick;
+    int _heartbeatTick;
+    Task? _pollTask;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Directory.CreateDirectory(VoiceDir);
+        _location = _locations[0];
+
+        if (!Players.HasPlayer)
+        {
+            Nav.NavigateTo("/setup");
+            return;
+        }
+
+        var player = Players.Current!;
+        _playerId = player.Id;
+        _playerName = !string.IsNullOrWhiteSpace(player.FullName)
+            ? player.FullName
+            : player.DisplayName;
+        _playerCharacterKey = "player:" + _playerId;
+
+        foreach (var loc in _locations)
+        {
+            await KnownLocations.RegisterWorldLocationAsync(new WorldLocationRegistration
+            {
+                LocationId = loc.Id,
+                Name = loc.Name,
+                Aliases = loc.Aliases,
+                LocationType = loc.Id.Contains("apartment", StringComparison.OrdinalIgnoreCase) ||
+                               loc.Id.Contains("house", StringComparison.OrdinalIgnoreCase)
+                    ? "residence"
+                    : "business"
+            });
+        }
+
+        var existingPresence = await PlayerPresence.GetAsync(
+            _playerId,
+            _lifetime.Token);
+
+        if (existingPresence?.Status.Equals(
+                "traveling",
+                StringComparison.OrdinalIgnoreCase) == true)
+        {
+            // Physical travel is now server-owned. Do not let opening the
+            // In Person page teleport the player out of an active trip.
+            Nav.NavigateTo("/", replace: true);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(RequestedLocationId) &&
+            existingPresence?.HasLocation == true &&
+            existingPresence.LocationId.Equals(
+                RequestedLocationId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _location = ResolveLocation(
+                existingPresence.LocationId,
+                existingPresence.LocationDisplayName);
+        }
+        else if (existingPresence?.HasLocation == true)
+        {
+            _location = ResolveLocation(
+                existingPresence.LocationId,
+                existingPresence.LocationDisplayName);
+        }
+
+        await EnterLocationAsync(_location, initial: true);
+        ApplyTimeOfDay(Clock.Now.Hour);
+        Clock.Changed += HandleClockChanged;
+        _initialized = true;
+
+        _pollTask = PollSceneLoopAsync(_lifetime.Token);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_initialized || string.IsNullOrWhiteSpace(RequestedLocationId))
+            return;
+
+        var physical = await PlayerPresence.GetAsync(
+            _playerId,
+            _lifetime.Token);
+
+        if (physical?.Status.Equals(
+                "traveling",
+                StringComparison.OrdinalIgnoreCase) == true)
+        {
+            AddLocalEntry(
+                SceneEntryKind.SceneUpdate,
+                null,
+                null,
+                "World",
+                "You are currently traveling. Use the Travel panel to continue the trip.");
+            return;
+        }
+
+        if (physical?.HasLocation != true ||
+            !physical.LocationId.Equals(
+                RequestedLocationId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            AddLocalEntry(
+                SceneEntryKind.SceneUpdate,
+                null,
+                null,
+                "World",
+                "Opening a location link no longer teleports you. Use Travel to physically go there.");
+            return;
+        }
+
+        if (_location.Id.Equals(
+                physical.LocationId,
+                StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _location = ResolveLocation(
+            physical.LocationId,
+            physical.LocationDisplayName);
+
+        await EnterLocationAsync(_location, initial: false);
+    }
+
+    async Task EnterLocationAsync(LocationPack location, bool initial)
+    {
+        await KnownLocations.LearnLocationAsync(
+            _playerId,
+            location.Id,
+            initial ? "current_scene" : "travel",
+            canTravelDirectly: true);
+
+        // NPC positions are world-owned; reconcile them before the player enters.
+        await Occupancy.SynchronizeAsync(Clock.Now, _lifetime.Token);
+
+        var (noise, clutter) = SceneEnvironmentFor(location.Id);
+
+        var current = await PlayerPresence.GetAsync(
+            _playerId,
+            _lifetime.Token);
+
+        PlayerWorldPresenceMoveResult move;
+
+        if (current?.HasLocation == true &&
+            current.LocationId.Equals(location.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            var attached = await PlayerPresence.AttachClientAsync(
+                _playerId,
+                _playerName,
+                _lifetime.Token);
+
+            await PlayerPresence.HeartbeatAsync(
+                _playerId,
+                "conversation",
+                0.90,
+                _lifetime.Token);
+
+            move = new PlayerWorldPresenceMoveResult
+            {
+                State = attached,
+                SceneChanged = false,
+                PreviousLocationId = attached.LocationId,
+                PreviousSceneId = attached.SceneId,
+                ActivePlayersInNewScene = 0
+            };
+        }
+        else
+        {
+            move = await PlayerPresence.MoveToLocationAsync(
+                new PlayerWorldPresenceMoveRequest
+                {
+                    PlayerId = _playerId,
+                    PlayerName = _playerName,
+                    LocationId = location.Id,
+                    LocationDisplayName = location.Name,
+                    AmbientNoise = noise,
+                    VisualClutter = clutter,
+                    Activity = "conversation",
+                    Attention = 0.90,
+                    Reason = initial ? "initial_scene" : "travel"
+                },
+                _lifetime.Token);
+        }
+
+        _sceneId = move.State.SceneId;
+        _playerCharacterKey = move.PlayerCharacterKey;
+        _sceneJoined = move.State.HasLocation;
+        _lastServerSequence = 0;
+        _seenServerEntries.Clear();
+
+        var session = await GroupScenes.EnsureSceneAsync(
+            _sceneId,
+            _lifetime.Token);
+
+        if (session.IsNew)
+        {
+            await GroupScenes.AppendWorldEntryAsync(
+                _sceneId,
+                "scene",
+                location.Narrative,
+                _lifetime.Token);
+        }
+        else if (!initial && move.SceneChanged)
+        {
+            AddLocalEntry(
+                SceneEntryKind.SceneUpdate,
+                null,
+                null,
+                "World",
+                $"You arrive at {location.Name}.");
+        }
+
+        await RefreshPresenceAsync(_lifetime.Token);
+        await RefreshServerEntriesAsync(_lifetime.Token);
+    }
+
+    async Task ChangeLocationAsync(LocationPack next)
+    {
+        if (_location.Id == next.Id)
+            return;
+
+        _location = next;
+        ApplyTimeOfDay(Clock.Now.Hour);
+
+        AddLocalEntry(
+            SceneEntryKind.SceneUpdate,
+            null,
+            null,
+            "World",
+            $"Traveling to {next.Name}…");
+
+        await EnterLocationAsync(next, initial: false);
+
+        if (_voiceOn)
+            _ = Task.Run(() => SpeakNarrativeAsync(next.Narrative));
+    }
+
+    async Task OnSayKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !_chatBusy)
+            await Send();
+    }
+
+    Task Send()
+    {
+        if (_chatBusy || !_sceneJoined)
+            return Task.CompletedTask;
+
+        var action = _actionDraft.Trim();
+        var speech = _sayDraft.Trim();
+
+        if (action.Length == 0 && speech.Length == 0)
+            return Task.CompletedTask;
+
+        _actionDraft = "";
+        _sayDraft = "";
+        _chatBusy = true;
+
+        string sceneId = _sceneId;
+
+        // Do not write a second local copy of the player's turn. Phase 9 stores
+        // the player action/speech immediately, and this page's fast poll picks
+        // it up while the NPC Brain calls continue in the background.
+        _ = Task.Run(() => RunSharedTurnAsync(
+            sceneId,
+            action,
+            speech,
+            _lifetime.Token));
+
+        return Task.CompletedTask;
+    }
+
+    async Task RunSharedTurnAsync(
+        string sceneId,
+        string action,
+        string speech,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await GroupScenes.SubmitPlayerTurnAsync(
+                new GroupScenePlayerTurnRequest
+                {
+                    SceneId = sceneId,
+                    PlayerId = _playerId,
+                    PlayerName = _playerName,
+                    PlayerCharacterKey = _playerCharacterKey,
+                    ActionText = action,
+                    SpeechText = speech,
+                    VoiceLevel = "normal",
+                    MaxNpcReplies = 3
+                },
+                cancellationToken);
+
+            if (_disposed || !_sceneId.Equals(sceneId, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            // The short scene poll paints entries. Do not mutate Razor component
+            // state from this background AI worker.
+            if (_voiceOn)
+            {
+                var eveSpeech = result.PlayerVisibleEntries
+                    .Where(x => x.ActorNpcId == EveNpcId &&
+                                x.EntryType.Equals("speech", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(x => x.Sequence)
+                    .Select(x => x.Text)
+                    .LastOrDefault();
+
+                if (!string.IsNullOrWhiteSpace(eveSpeech))
+                    _ = Task.Run(() => SpeakEveAsync(eveSpeech));
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            if (!_disposed)
+            {
+                await InvokeAsync(() =>
+                {
+                    AddLocalEntry(
+                        SceneEntryKind.SceneUpdate,
+                        null,
+                        null,
+                        "World",
+                        "Conversation error: " + ex.Message);
+                    StateHasChanged();
+                });
+            }
+        }
+        finally
+        {
+            if (!_disposed)
+            {
+                await InvokeAsync(() =>
+                {
+                    _chatBusy = false;
+                    StateHasChanged();
+                });
+            }
+        }
+    }
+
+    async Task PollSceneLoopAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            bool changed = false;
+
+            try
+            {
+                changed |= await RefreshServerEntriesAsync(cancellationToken);
+
+                _presenceTick++;
+                if (_presenceTick >= 3)
+                {
+                    _presenceTick = 0;
+                    await RefreshPresenceAsync(cancellationToken);
+                }
+
+                _heartbeatTick++;
+                if (_heartbeatTick >= 18)
+                {
+                    _heartbeatTick = 0;
+                    await PlayerPresence.HeartbeatAsync(
+                        _playerId,
+                        "conversation",
+                        0.90,
+                        cancellationToken);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[SharedScene poll] " + ex.Message);
+            }
+
+            if (changed && !_disposed)
+            {
+                try
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch { }
+            }
+
+            try
+            {
+                await Task.Delay(_chatBusy ? 250 : 700, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+    }
+
+    async Task<bool> RefreshServerEntriesAsync(CancellationToken cancellationToken)
+    {
+        if (!_sceneJoined || string.IsNullOrWhiteSpace(_sceneId))
+            return false;
+
+        string sceneSnapshot = _sceneId;
+        long afterSnapshot = _lastServerSequence;
+
+        var rows = await GroupScenes.GetPlayerViewAsync(
+            sceneSnapshot,
+            _playerId,
+            afterSnapshot,
+            250,
+            cancellationToken);
+
+        // Travel can happen while the SQLite read is in flight. Never paint old
+        // location entries into the new scene.
+        if (!_sceneId.Equals(sceneSnapshot, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        bool changed = false;
+
+        foreach (var row in rows.OrderBy(x => x.Sequence))
+        {
+            if (row.Sequence > _lastServerSequence)
+                _lastServerSequence = row.Sequence;
+
+            if (!_seenServerEntries.Add(row.EntryId))
+                continue;
+
+            var kind = ParseEntryKind(row.EntryType);
+            if (string.IsNullOrWhiteSpace(row.Text))
+                continue;
+
+            _entries.Add(new SceneEntry
+            {
+                DisplayOrder = ++_localDisplayOrder,
+                ServerEntryId = row.EntryId,
+                ServerSequence = row.Sequence,
+                Kind = kind,
+                ActorId = row.ActorNpcId,
+                ActorPlayerId = row.ActorPlayerId,
+                ActorName = row.ActorName,
+                Text = row.Text.Trim(),
+                GameTime = row.GameTime,
+                IsPlayer = !string.IsNullOrWhiteSpace(row.ActorPlayerId),
+                IsLocalPlayer = !string.IsNullOrWhiteSpace(row.ActorPlayerId) &&
+                                row.ActorPlayerId.Equals(_playerId, StringComparison.OrdinalIgnoreCase),
+                PerceptionQuality = row.PerceptionQuality ?? "clear"
+            });
+
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    async Task RefreshPresenceAsync(CancellationToken cancellationToken)
+    {
+        if (!_sceneJoined || string.IsNullOrWhiteSpace(_sceneId))
+            return;
+
+        string sceneSnapshot = _sceneId;
+        var visible = await PlayerPresence.GetPerceivedPresenceAsync(
+            _playerId,
+            cancellationToken);
+
+        if (!_sceneId.Equals(sceneSnapshot, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        SceneUi.SetScene(
+            _location.Id,
+            _location.Name,
+            visible.Select(x => new PerceivedPresenceRow
+            {
+                CharacterId = x.NpcId,
+                DisplayName = x.DisplayName,
+                DistanceFeet = x.DistanceFeet,
+                IsPlayer = x.IsPlayer,
+                IsLocalPlayer = x.CharacterKey.Equals(
+                    _playerCharacterKey,
+                    StringComparison.OrdinalIgnoreCase),
+                IsKnownToPlayer = true,
+                Note = x.Note
+            }));
+    }
+
+    void AddLocalEntry(
+        SceneEntryKind kind,
+        int? actorId,
+        string? actorPlayerId,
+        string actorName,
+        string text)
+    {
+        text = (text ?? "").Trim();
+        if (text.Length == 0)
+            return;
+
+        _entries.Add(new SceneEntry
+        {
+            DisplayOrder = ++_localDisplayOrder,
+            Kind = kind,
+            ActorId = actorId,
+            ActorPlayerId = actorPlayerId,
+            ActorName = actorName,
+            Text = text,
+            GameTime = Clock.Now,
+            IsPlayer = !string.IsNullOrWhiteSpace(actorPlayerId),
+            IsLocalPlayer = actorPlayerId?.Equals(
+                _playerId,
+                StringComparison.OrdinalIgnoreCase) == true,
+            PerceptionQuality = "clear"
+        });
+    }
+
+    static SceneEntryKind ParseEntryKind(string? kind)
+        => kind?.Trim().ToLowerInvariant() switch
+        {
+            "speech" => SceneEntryKind.Speech,
+            "action" => SceneEntryKind.Action,
+            "body_language" => SceneEntryKind.BodyLanguage,
+            "scene_update" => SceneEntryKind.SceneUpdate,
+            _ => SceneEntryKind.Scene
+        };
+
+    string SceneBackgroundStyle
+    {
+        get
+        {
+            var url = _location?.BgUrl;
+            if (string.IsNullOrWhiteSpace(url))
+                return "";
+
+            return $"background-image:linear-gradient(rgba(4,5,8,.56),rgba(4,5,8,.72)),url('{url}');";
+        }
+    }
+
+    string EntryStyle(SceneEntry entry)
+    {
+        if (entry.Kind is SceneEntryKind.Scene or SceneEntryKind.SceneUpdate)
+            return "";
+
+        int hue;
+        if (entry.IsLocalPlayer)
+            hue = 205;
+        else if (entry.IsPlayer)
+            hue = ActorHue(null, (entry.ActorPlayerId ?? "") + "|" + entry.ActorName);
+        else
+            hue = ActorHue(entry.ActorId, entry.ActorName);
+
+        var (sat, light) = entry.Kind switch
+        {
+            SceneEntryKind.Speech => (78, 74),
+            SceneEntryKind.Action => (62, 62),
+            SceneEntryKind.BodyLanguage => (42, 70),
+            _ => (60, 70)
+        };
+
+        return $"--actor-hue:{hue};--entry-sat:{sat}%;--entry-light:{light}%;";
+    }
+
+    static int ActorHue(int? actorId, string name)
+    {
+        if (actorId.HasValue)
+            return Math.Abs((actorId.Value * 53 + 278) % 360);
+
+        unchecked
+        {
+            var hash = 17;
+            foreach (var ch in name ?? "")
+                hash = hash * 31 + ch;
+
+            return Math.Abs(hash % 360);
+        }
+    }
+
+    static string EntryClass(SceneEntryKind kind)
+        => kind switch
+        {
+            SceneEntryKind.Scene => "world scene-opening",
+            SceneEntryKind.SceneUpdate => "world scene-update",
+            SceneEntryKind.Speech => "actor speech",
+            SceneEntryKind.Action => "actor action",
+            SceneEntryKind.BodyLanguage => "actor body-language",
+            _ => ""
+        };
+
+    static string KindLabel(SceneEntryKind kind)
+        => kind switch
+        {
+            SceneEntryKind.Speech => "speech",
+            SceneEntryKind.Action => "action",
+            SceneEntryKind.BodyLanguage => "body",
+            SceneEntryKind.SceneUpdate => "scene update",
+            _ => "scene"
+        };
+
+    LocationPack ResolveLocation(string id, string knownName)
+    {
+        var authored = _locations.FirstOrDefault(x =>
+            x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+
+        return authored ?? new LocationPack(
+            id,
+            string.IsNullOrWhiteSpace(knownName) ? id : knownName,
+            "",
+            $"You arrive at {knownName}.",
+            "",
+            knownName);
+    }
+
+    static (double Noise, double Clutter) SceneEnvironmentFor(string locationId)
+        => locationId switch
+        {
+            "coffee-shop" => (0.24, 0.18),
+            "eve-apartment" => (0.07, 0.10),
+            "ryans-house" => (0.06, 0.08),
+            _ => (0.15, 0.15)
+        };
+
+    void ApplyTimeOfDay(int hour)
+    {
+        _timeLabel = hour switch
+        {
+            >= 5 and < 11 => "Morning",
+            >= 11 and < 17 => "Afternoon",
+            >= 17 and < 21 => "Evening",
+            _ => "Night"
+        };
+    }
+
+    void HandleClockChanged(GameTimeSnapshot snapshot)
+        => _ = InvokeAsync(() =>
+        {
+            ApplyTimeOfDay(snapshot.GameTime.Hour);
+            StateHasChanged();
+        });
+
+    void ToggleVoice() => _voiceOn = !_voiceOn;
+
+    async Task SpeakEveAsync(string speech)
+    {
+        if (!_voiceOn || string.IsNullOrWhiteSpace(speech) || speech == "...")
+            return;
+
+        if (speech.Length > 280)
+            speech = speech[..280].Trim() + "...";
+
+        await SpeakAsync(speech, "eve2", "eve");
+    }
+
+    async Task SpeakNarrativeAsync(string text)
+    {
+        if (!_voiceOn || string.IsNullOrWhiteSpace(text))
+            return;
+
+        await SpeakAsync(text, "narrative", "scene");
+    }
+
+    async Task SpeakAsync(string text, string voice, string prefix)
+    {
+        var fileName = $"{prefix}_{DateTime.Now:yyyyMMdd_HHmmss_fff}.wav";
+        var outPath = Path.Combine(VoiceDir, fileName);
+
+        _ttsBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            Tts.Enqueue(text, voice, outPath);
+            if (await WaitForNewFile(outPath, TtsTimeoutMs))
+                _lastAudioUrl = $"/api/voice/{fileName}?t={DateTime.Now.Ticks}";
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("[TTS] " + ex.Message);
+        }
+        finally
+        {
+            _ttsBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    static async Task<bool> WaitForNewFile(string path, int timeoutMs)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        long lastLen = -1;
+        var stable = 0;
+
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    var len = new FileInfo(path).Length;
+                    if (len > 2000)
+                    {
+                        if (len == lastLen)
+                        {
+                            stable++;
+                            if (stable >= 2)
+                                return true;
+                        }
+                        else
+                        {
+                            stable = 0;
+                            lastLen = len;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            await Task.Delay(300);
+        }
+
+        return false;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        Clock.Changed -= HandleClockChanged;
+
+        _lifetime.Cancel();
+
+        if (_pollTask != null)
+        {
+            try { await _pollTask; }
+            catch { }
+        }
+
+        // Phase 14: leaving this Razor page is NOT leaving the physical world.
+        // MainLayout keeps the player's server-owned presence alive while the
+        // player uses Messages / Contacts / Calls / other PhoneOS apps.
+        _lifetime.Dispose();
+    }
+
+    enum SceneEntryKind
+    {
+        Scene,
+        SceneUpdate,
+        Speech,
+        Action,
+        BodyLanguage
+    }
+
+    sealed class SceneEntry
+    {
+        public long DisplayOrder { get; set; }
+        public long? ServerEntryId { get; set; }
+        public long ServerSequence { get; set; }
+        public SceneEntryKind Kind { get; set; }
+        public int? ActorId { get; set; }
+        public string? ActorPlayerId { get; set; }
+        public string ActorName { get; set; } = "";
+        public string Text { get; set; } = "";
+        public DateTimeOffset GameTime { get; set; }
+        public bool IsPlayer { get; set; }
+        public bool IsLocalPlayer { get; set; }
+        public string PerceptionQuality { get; set; } = "clear";
+    }
+
+    sealed record LocationPack(
+        string Id,
+        string Name,
+        string BgUrl,
+        string Narrative,
+        string Weather,
+        string Aliases);
+}
